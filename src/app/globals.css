@@ -580,3 +580,46 @@ body {
   border-radius: 12px;
   border: 1px solid var(--border-color);
 }
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .app-container {
+    flex-direction: column;
+    overflow-y: auto;
+    height: auto;
+  }
+  
+  .dashboard-panel {
+    border-right: none;
+    height: auto;
+    overflow: visible;
+  }
+  
+  .simulator-panel {
+    display: none !important; /* Hide simulator on mobile/tablet */
+  }
+  
+  .dashboard-content {
+    padding: 15px;
+    overflow-y: visible;
+  }
+  
+  .dashboard-header {
+    padding: 15px;
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+    text-align: center;
+  }
+  
+  .dashboard-nav {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .nav-btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+  }
+}
