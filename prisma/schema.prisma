@@ -1,0 +1,57 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id              Int       @id @default(autoincrement())
+  name            String
+  phone           String?   @unique
+  telegramId      String?   @unique
+  role            String    // "ADMIN" | "ENGINEER" | "ASSEMBLER"
+  title           String?   // Job title / designation
+  isActive        Boolean   @default(true) // Status of employee (active or archived)
+  tasks           Task[]
+  managedProjects Project[] @relation("ProjectManager")
+}
+
+model Project {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  status      String   // "DESIGN" | "PURCHASE" | "ASSEMBLY" | "COMMISSIONING" | "DONE"
+  budget      Float?   // <-- ДОБАВИЛИ: Общий бюджет проекта (например, сумма договора в тенге)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+  managerId   Int?
+  manager     User?    @relation("ProjectManager", fields: [managerId], references: [id])
+}
+
+model Task {
+  id           Int      @id @default(autoincrement())
+  projectId    Int
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  status       String   // "PENDING" | "IN_PROGRESS" | "OTK" | "BLOCKED" | "DONE"
+  cost         Float?   // <-- ДОБАВИЛИ: Фактические затраты на эту конкретную задачу
+  assignees    User[]
+  alerts       Alert[]
+  updatedAt    DateTime @updatedAt
+}
+
+model Alert {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  text      String
+  status    String   // "ACTIVE" | "RESOLVED"
+  createdAt DateTime @default(now())
+}
