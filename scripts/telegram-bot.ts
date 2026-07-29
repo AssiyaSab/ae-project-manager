@@ -24,27 +24,32 @@ bot.on('message', async (msg) => {
     // 1. If user shared a contact
     if (msg.contact) {
       const phone = msg.contact.phone_number;
-      console.log(`Получен контакт от пользователя: ${msg.from?.first_name} (${phone})`);
-      
+      console.log(`[BOT] Получен контакт от пользователя: ${msg.from?.first_name} (${phone})`);
+      console.log(`[BOT] Запрос к базе данных для авторизации по контакту ${phone}...`);
       const response = await handleIncomingBotMessage({ phone, telegramId: chatId }, '/start');
+      console.log(`[BOT] Ответ из базы данных по контакту получен. Текст ответа: "${response.replyText.substring(0, 50)}..."`);
       
+      console.log(`[BOT] Отправляем приветствие после авторизации на chat_id ${chatId}...`);
       await bot.sendMessage(chatId, response.replyText, {
         parse_mode: 'Markdown',
         reply_markup: {
           remove_keyboard: true,
         },
       });
+      console.log(`[BOT] Приветствие успешно отправлено на chat_id ${chatId}`);
       return;
     }
 
     // 2. If it's a standard text message / command
-    console.log(`Получено сообщение от chat_id ${chatId}: "${text}"`);
+    console.log(`[BOT] Получено сообщение от chat_id ${chatId}: "${text}"`);
     
-    // Check if the user is already registered (by telegramId)
+    console.log(`[BOT] Запрос к базе данных для telegramId ${chatId}...`);
     const response = await handleIncomingBotMessage({ telegramId: chatId }, text);
+    console.log(`[BOT] Ответ из базы данных получен. Текст ответа: "${response.replyText.substring(0, 50)}..."`);
 
     // If user is not found, offer them to share contact
-    if (response.replyText.includes('не зарегистрированы в системе')) {
+    if (response.isUnregistered) {
+      console.log(`[BOT] Пользователь не найден. Отправляем запрос контакта на chat_id ${chatId}...`);
       await bot.sendMessage(chatId, response.replyText, {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -55,6 +60,7 @@ bot.on('message', async (msg) => {
           resize_keyboard: true
         }
       });
+      console.log(`[BOT] Запрос контакта успешно отправлен на chat_id ${chatId}`);
     } else {
       // Send regular message with keyboard if available
       const options: any = {
@@ -65,11 +71,17 @@ bot.on('message', async (msg) => {
         options.reply_markup = response.keyboard;
       }
 
+      console.log(`[BOT] Отправляем обычный ответ на chat_id ${chatId}...`);
       await bot.sendMessage(chatId, response.replyText, options);
+      console.log(`[BOT] Ответ успешно отправлен на chat_id ${chatId}`);
     }
   } catch (error) {
-    console.error('Ошибка обработки сообщения в Telegram-боте:', error);
-    await bot.sendMessage(chatId, '🔴 Произошла внутренняя ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.');
+    console.error('[BOT] Ошибка обработки сообщения в Telegram-боте:', error);
+    try {
+      await bot.sendMessage(chatId, '🔴 Произошла внутренняя ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.');
+    } catch (sendError) {
+      console.error('[BOT] Не удалось отправить сообщение об ошибке:', sendError);
+    }
   }
 });
 

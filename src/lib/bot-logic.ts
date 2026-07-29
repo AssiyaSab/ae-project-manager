@@ -6,6 +6,7 @@ export interface BotResponse {
   keyboard?: any; // Telegram keyboard markup
   updatedTask?: any;
   createdAlert?: any;
+  isUnregistered?: boolean;
 }
 
 export async function handleIncomingBotMessage(
@@ -42,6 +43,7 @@ export async function handleIncomingBotMessage(
   if (!user) {
     return {
       replyText: `Привет! Вы не зарегистрированы в системе AE Project Manager. Пожалуйста, отправьте свой контакт ГИПу для добавления в базу данных.\nВаш Telegram ID: ${telegramId || 'Неизвестен'}`,
+      isUnregistered: true,
     };
   }
 
