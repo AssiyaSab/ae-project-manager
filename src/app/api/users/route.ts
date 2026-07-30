@@ -15,7 +15,16 @@ export async function GET() {
   }
 }
 
+function validateAdmin(request: Request) {
+  const adminPassword = request.headers.get('x-admin-password');
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
+  return adminPassword === expectedPassword;
+}
+
 export async function POST(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { name, phone, role, title } = body;
@@ -38,6 +47,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { userId, name, phone, role, title, isActive } = body;
@@ -62,6 +74,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');

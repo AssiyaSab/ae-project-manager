@@ -58,6 +58,15 @@ interface ChatMessage {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin'>('dashboard');
+  
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [adminPassword, setAdminPassword] = useState<string>('');
+  const [showLoginModal, setShowLoginModal] = useState<boolean>(true);
+  const [loginUserId, setLoginUserId] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -132,6 +141,64 @@ export default function Home() {
   useEffect(() => {
     refreshData();
   }, []);
+
+  // Load session from localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem('ae_current_user');
+    const savedPassword = localStorage.getItem('ae_admin_password');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        setCurrentUser(u);
+        if (savedPassword) {
+          setAdminPassword(savedPassword);
+        }
+        setShowLoginModal(false);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('ae_current_user');
+    localStorage.removeItem('ae_admin_password');
+    setCurrentUser(null);
+    setAdminPassword('');
+    setShowLoginModal(true);
+    setLoginUserId('');
+    setLoginPassword('');
+    setLoginError('');
+  };
+
+  const handleLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginUserId) {
+      setLoginError('Пожалуйста, выберите пользователя.');
+      return;
+    }
+    const selectedUser = users.find(u => u.id === Number(loginUserId));
+    if (!selectedUser) {
+      setLoginError('Пользователь не найден.');
+      return;
+    }
+    
+    if (selectedUser.role === 'ADMIN') {
+      const expectedPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'AE_ADMIN_2026';
+      if (loginPassword !== expectedPassword) {
+        setLoginError('Неверный пароль ГИПа!');
+        return;
+      }
+    }
+    
+    // Login successful
+    setCurrentUser(selectedUser);
+    setAdminPassword(loginPassword);
+    localStorage.setItem('ae_current_user', JSON.stringify(selectedUser));
+    localStorage.setItem('ae_admin_password', loginPassword);
+    setShowLoginModal(false);
+    setLoginError('');
+  };
 
   // Scroll to bottom of chat
   useEffect(() => {
@@ -229,7 +296,7 @@ export default function Home() {
     try {
       await fetch('/api/alerts', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({ alertId, status: 'RESOLVED' }),
       });
       refreshData();
@@ -245,7 +312,7 @@ export default function Home() {
     try {
       await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           name: projectName,
           description: projectDesc,
@@ -283,7 +350,7 @@ export default function Home() {
     try {
       await fetch('/api/projects', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           projectId: editingProjectId,
           name: editProjectName,
@@ -307,7 +374,7 @@ export default function Home() {
     try {
       await fetch('/api/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           projectId: taskProjectId,
           name: taskName,
@@ -332,7 +399,10 @@ export default function Home() {
   const handleDeleteProject = async (projectId: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить этот проект и все его задачи?')) return;
     try {
-      await fetch(`/api/projects?projectId=${projectId}`, { method: 'DELETE' });
+      await fetch(`/api/projects?projectId=${projectId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword || '' }
+      });
       refreshData();
     } catch (err) {
       console.error(err);
@@ -356,7 +426,7 @@ export default function Home() {
     try {
       await fetch('/api/tasks', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           taskId: editingTaskId,
           name: editTaskName,
@@ -377,7 +447,10 @@ export default function Home() {
   const handleDeleteTask = async (taskId: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить эту задачу?')) return;
     try {
-      await fetch(`/api/tasks?taskId=${taskId}`, { method: 'DELETE' });
+      await fetch(`/api/tasks?taskId=${taskId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword || '' }
+      });
       refreshData();
     } catch (err) {
       console.error(err);
@@ -402,7 +475,7 @@ export default function Home() {
     try {
       await fetch('/api/users', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           userId: editingUserId,
           name: editUserName,
@@ -427,7 +500,7 @@ export default function Home() {
     try {
       await fetch('/api/users', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           userId: user.id,
           isActive: !user.isActive
@@ -443,7 +516,10 @@ export default function Home() {
   const handleDeleteUser = async (userId: number) => {
     if (!window.confirm('Вы уверены, что хотите удалить этого сотрудника?')) return;
     try {
-      await fetch(`/api/users?userId=${userId}`, { method: 'DELETE' });
+      await fetch(`/api/users?userId=${userId}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword || '' }
+      });
       refreshData();
     } catch (err) {
       console.error(err);
@@ -457,7 +533,7 @@ export default function Home() {
     try {
       await fetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
         body: JSON.stringify({
           name: newUserName,
           phone: newUserPhone || null,
@@ -634,7 +710,7 @@ export default function Home() {
         try {
           const res = await fetch('/api/users', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
             body: JSON.stringify({
               name,
               phone: phone || null,
@@ -692,12 +768,14 @@ export default function Home() {
             >
               📊 Дашборд
             </button>
-            <button 
-              className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
-              onClick={() => setActiveTab('forms')}
-            >
-              ➕ Добавить
-            </button>
+            {currentUser?.role === 'ADMIN' && (
+              <button 
+                className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
+                onClick={() => setActiveTab('forms')}
+              >
+                ➕ Добавить
+              </button>
+            )}
             <button 
               className={`nav-btn ${activeTab === 'alerts' ? 'active' : ''}`}
               onClick={() => {
@@ -707,16 +785,40 @@ export default function Home() {
             >
               ⚠️ Алерты ({alerts.filter(a => a.status === 'ACTIVE').length})
             </button>
-            <button 
-              className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('admin');
-                refreshData();
-              }}
-            >
-              ⚙️ Админка
-            </button>
+            {currentUser?.role === 'ADMIN' && (
+              <button 
+                className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('admin');
+                  refreshData();
+                }}
+              >
+                ⚙️ Админка
+              </button>
+            )}
           </nav>
+          
+          {currentUser && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
+              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
+              <button 
+                onClick={handleLogout}
+                style={{
+                  background: '#f43f5e15',
+                  color: '#f43f5e',
+                  border: '1px solid #f43f5e30',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontWeight: 600
+                }}
+              >
+                Выйти 🚪
+              </button>
+            </div>
+          )}
         </header>
 
         <main className="dashboard-content">
@@ -839,20 +941,24 @@ export default function Home() {
                           <div className="project-title-row">
                             <h3 className="project-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               {project.name}
-                              <button 
-                                onClick={() => startEditingProject(project)}
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.95rem', opacity: 0.6, padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}
-                                title="Редактировать проект"
-                              >
-                                ✏️
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteProject(project.id)}
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.95rem', opacity: 0.6, padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}
-                                title="Удалить проект"
-                              >
-                                🗑️
-                              </button>
+                              {currentUser?.role === 'ADMIN' && (
+                                <>
+                                  <button 
+                                    onClick={() => startEditingProject(project)}
+                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.95rem', opacity: 0.6, padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}
+                                    title="Редактировать проект"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteProject(project.id)}
+                                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.95rem', opacity: 0.6, padding: '2px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center' }}
+                                    title="Удалить проект"
+                                  >
+                                    🗑️
+                                  </button>
+                                </>
+                              )}
                             </h3>
                             <span className={`badge ${project.status.toLowerCase()}`}>
                               {project.status === 'DESIGN' && 'Проектирование'}
@@ -999,20 +1105,24 @@ export default function Home() {
                                       <div className="task-header">
                                         <span className="task-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                           {task.name}
-                                          <button 
-                                            onClick={() => startEditingTask(task)}
-                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem', opacity: 0.6 }}
-                                            title="Редактировать задачу"
-                                          >
-                                            ✏️
-                                          </button>
-                                          <button 
-                                            onClick={() => handleDeleteTask(task.id)}
-                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem', opacity: 0.6 }}
-                                            title="Удалить задачу"
-                                          >
-                                            🗑️
-                                          </button>
+                                          {currentUser?.role === 'ADMIN' && (
+                                            <>
+                                              <button 
+                                                onClick={() => startEditingTask(task)}
+                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem', opacity: 0.6 }}
+                                                title="Редактировать задачу"
+                                              >
+                                                ✏️
+                                              </button>
+                                              <button 
+                                                onClick={() => handleDeleteTask(task.id)}
+                                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.8rem', opacity: 0.6 }}
+                                                title="Удалить задачу"
+                                              >
+                                                🗑️
+                                              </button>
+                                            </>
+                                          )}
                                         </span>
                                         <span className={`badge ${task.status.toLowerCase()}`}>
                                           {task.status === 'PENDING' && 'Ожидает'}
@@ -1664,6 +1774,116 @@ export default function Home() {
                   Сохранить
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 4. Login Overlay Modal */}
+      {showLoginModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(5, 8, 16, 0.95)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+        }}>
+          <div className="form-card" style={{
+            width: '100%',
+            maxWidth: '420px',
+            margin: '20px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: 'linear-gradient(135deg, #111827 0%, #0b0f19 100%)',
+            padding: '40px 30px',
+            borderRadius: '16px',
+            textAlign: 'center'
+          }}>
+            <div style={{ marginBottom: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', height: '60px', marginBottom: '20px' }}>
+                <img 
+                  src="/logo.png" 
+                  alt="АзияЭнергоАвтоматика" 
+                  style={{ 
+                    maxHeight: '100%', 
+                    width: 'auto', 
+                    objectFit: 'contain'
+                  }} 
+                />
+              </div>
+              <h2 style={{ fontSize: '1.4rem', color: '#fff', fontWeight: 600, margin: '0 0 8px 0' }}>AE Project Manager</h2>
+              <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: 0 }}>Управление и мониторинг шкафов автоматики</p>
+            </div>
+            
+            <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ color: '#94a3b8' }}>Выберите сотрудника</label>
+                <select 
+                  className="form-select" 
+                  style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', height: '42px' }}
+                  value={loginUserId}
+                  onChange={(e) => {
+                    setLoginUserId(e.target.value);
+                    setLoginPassword('');
+                    setLoginError('');
+                  }}
+                  required
+                >
+                  <option value="">-- Выберите из списка --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role === 'ADMIN' ? 'ГИП' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Show password field only if the selected user is ADMIN */}
+              {users.find(u => u.id === Number(loginUserId))?.role === 'ADMIN' && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" style={{ color: '#94a3b8' }}>Пароль ГИПа</label>
+                  <input 
+                    type="password" 
+                    className="form-input" 
+                    placeholder="Введите пароль..."
+                    style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', height: '42px' }}
+                    value={loginPassword}
+                    onChange={(e) => {
+                      setLoginPassword(e.target.value);
+                      setLoginError('');
+                    }}
+                    required
+                  />
+                </div>
+              )}
+
+              {loginError && (
+                <div style={{ color: '#ff3344', fontSize: '0.82rem', fontWeight: 500, padding: '8px 12px', background: 'rgba(255, 51, 68, 0.1)', border: '1px solid rgba(255, 51, 68, 0.2)', borderRadius: '8px' }}>
+                  ❌ {loginError}
+                </div>
+              )}
+
+              <button 
+                type="submit" 
+                className="btn-submit" 
+                style={{ 
+                  width: '100%', 
+                  background: 'linear-gradient(135deg, var(--accent-orange) 0%, #e06000 100%)', 
+                  color: '#000', 
+                  fontWeight: 700, 
+                  height: '42px', 
+                  fontSize: '0.95rem',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 14px rgba(224, 96, 0, 0.3)'
+                }}
+              >
+                Войти в систему
+              </button>
             </form>
           </div>
         </div>

@@ -3,6 +3,12 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
+function validateAdmin(request: Request) {
+  const adminPassword = request.headers.get('x-admin-password');
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
+  return adminPassword === expectedPassword;
+}
+
 export async function GET() {
   try {
     const projects = await prisma.project.findMany({
@@ -25,6 +31,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { name, description, status, budget, managerId } = body;
@@ -48,6 +57,9 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { projectId, name, description, status, budget, managerId } = body;
@@ -72,6 +84,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('projectId');

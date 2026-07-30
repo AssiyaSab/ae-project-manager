@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+function validateAdmin(request: Request) {
+  const adminPassword = request.headers.get('x-admin-password');
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
+  return adminPassword === expectedPassword;
+}
+
 export async function POST(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const body = await request.json();
     const { projectId, name, description, status, assigneeIds, cost } = body;
@@ -32,6 +41,11 @@ export async function PATCH(request: Request) {
     if (!taskId) {
       return NextResponse.json({ error: 'taskId is required' }, { status: 400 });
     }
+
+    const isOnlyStatusUpdate = status !== undefined && name === undefined && description === undefined && assigneeIds === undefined && cost === undefined;
+    if (!isOnlyStatusUpdate && !validateAdmin(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     
     // If status is updated to DONE or IN_PROGRESS, also resolve any active alerts associated with this task
     if (status === 'DONE' || status === 'IN_PROGRESS') {
@@ -59,6 +73,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get('taskId');
