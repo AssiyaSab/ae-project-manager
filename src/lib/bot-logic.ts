@@ -1,5 +1,6 @@
 import { prisma } from './db';
 import { analyzeReport } from './gemini';
+import { sendTelegramMessage } from './telegram';
 
 export interface BotResponse {
   replyText: string;
@@ -9,32 +10,121 @@ export interface BotResponse {
   isUnregistered?: boolean;
 }
 
+/**
+ * Sends notifications to GIP / Project Managers when a task blocker occurs
+ */
+async function notifyManagersAboutBlocker(
+  project: { name: string; manager?: { telegramId: string | null } | null },
+  task: { name: string },
+  user: { name: string; role: string; telegramId?: string | null },
+  reason: string
+) {
+  try {
+    const recipients = new Set<string>();
+
+    // 1. Project Manager if assigned and has Telegram
+    if (project.manager?.telegramId) {
+      recipients.add(project.manager.telegramId);
+    }
+
+    // 2. All Admins / GIPs with linked Telegram
+    const admins = await prisma.user.findMany({
+      where: {
+        role: { in: ['ADMIN', 'GIP'] },
+        telegramId: { not: null },
+        isActive: true,
+      },
+    });
+
+    admins.forEach((admin) => {
+      if (admin.telegramId) {
+        recipients.add(admin.telegramId);
+      }
+    });
+
+    // Don't send notification to the author themselves if they are an admin
+    if (user.telegramId) {
+      recipients.delete(user.telegramId);
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ae-project-manager-nu.vercel.app';
+    const alertMessage =
+      `🚨 *ВНИМАНИЕ, ГИП! ОБНАРУЖЕН БЛОКЕР*\n\n` +
+      `• Объект: *${project.name}*\n` +
+      `• Раздел / Задача: *${task.name}*\n` +
+      `• Исполнитель: *${user.name}* (${user.role})\n` +
+      `• Причина: _${reason}_\n\n` +
+      `🔗 [Открыть панель управления](${appUrl})`;
+
+    for (const chatId of recipients) {
+      await sendTelegramMessage(chatId, alertMessage);
+    }
+  } catch (error) {
+    console.error('Failed to notify project managers about blocker:', error);
+  }
+}
+
 export async function handleIncomingBotMessage(
   identifier: { phone?: string; telegramId?: string; username?: string },
   text: string
 ): Promise<BotResponse> {
-  const { phone, telegramId } = identifier;
+  const { phone, telegramId, username } = identifier;
+  const cleanText = text.trim();
 
-  // 1. Find the user
+  // 1. Find or bind user
   let user = null;
   if (telegramId) {
     user = await prisma.user.findUnique({ where: { telegramId } });
   }
-  if (!user && phone) {
-    // Normalise phone by stripping space, dash, parenthesis and matching last 10 digits
-    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
-    user = await prisma.user.findFirst({
-      where: {
-        phone: {
-          contains: cleanPhone.substring(cleanPhone.length - 10),
+
+  // If not found by telegramId, check if phone was provided via contact or text
+  let candidatePhone = phone;
+  if (!candidatePhone) {
+    // Extract phone numbers from text (e.g. +77011234567, 87011234567, 77011234567)
+    const phoneMatch = cleanText.match(/(?:\+?7|8)?[\s\-(\.]*(\d{3})[\s\-)\.]*(\d{3})[\s\-.]*(\d{2})[\s\-.]*(\d{2})/);
+    if (phoneMatch) {
+      candidatePhone = cleanText.replace(/[\s\-\(\)\.]/g, '');
+    }
+  }
+
+  if (!user && candidatePhone) {
+    const cleanPhoneDigits = candidatePhone.replace(/\D/g, '');
+    if (cleanPhoneDigits.length >= 10) {
+      const last10 = cleanPhoneDigits.substring(cleanPhoneDigits.length - 10);
+      user = await prisma.user.findFirst({
+        where: {
+          phone: {
+            contains: last10,
+          },
         },
+      });
+
+      // Link telegramId if user found
+      if (user && telegramId && !user.telegramId) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { telegramId },
+        });
+      }
+    }
+  }
+
+  // Also check by username in user name or title if still not linked
+  if (!user && username) {
+    const cleanUsername = username.replace('@', '').toLowerCase();
+    const candidates = await prisma.user.findMany({
+      where: {
+        telegramId: null,
       },
     });
-    
-    // Link telegramId if found and not linked yet
-    if (user && telegramId && !user.telegramId) {
+
+    const matchedCandidate = candidates.find((c) =>
+      c.name.toLowerCase().includes(cleanUsername)
+    );
+
+    if (matchedCandidate && telegramId) {
       user = await prisma.user.update({
-        where: { id: user.id },
+        where: { id: matchedCandidate.id },
         data: { telegramId },
       });
     }
@@ -42,16 +132,26 @@ export async function handleIncomingBotMessage(
 
   if (!user) {
     return {
-      replyText: `Привет! Вы не зарегистрированы в системе AE Project Manager. Пожалуйста, отправьте свой контакт ГИПу для добавления в базу данных.\nВаш Telegram ID: ${telegramId || 'Неизвестен'}`,
+      replyText:
+        `👋 Здравствуйте!\n\nВы еще не авторизованы в системе *AE Project Manager*.\n\n` +
+        `📱 Чтобы привязать свой аккаунт, нажмите кнопку *«Поделиться контактом»* ниже или просто отправьте свой номер телефона в чат (например: \`+77011234567\`).\n\n` +
+        `_Ваш Telegram ID: \`${telegramId || 'Неизвестен'}\`_`,
       isUnregistered: true,
+      keyboard: {
+        keyboard: [
+          [{ text: '📱 Поделиться контактом для авторизации', request_contact: true }],
+        ],
+        one_time_keyboard: true,
+        resize_keyboard: true,
+      },
     };
   }
 
   // 2. Handle button callbacks (Inline Queries / Text Commands)
-  const taskInProgressMatch = text.match(/^task_inprogress_(\d+)$/);
-  const taskOtkMatch = text.match(/^task_otk_(\d+)$/);
-  const taskBlockedMatch = text.match(/^task_blocked_(\d+)$/);
-  const taskDoneMatch = text.match(/^task_done_(\d+)$/);
+  const taskInProgressMatch = cleanText.match(/^task_inprogress_(\d+)$/);
+  const taskOtkMatch = cleanText.match(/^task_otk_(\d+)$/);
+  const taskBlockedMatch = cleanText.match(/^task_blocked_(\d+)$/);
+  const taskDoneMatch = cleanText.match(/^task_done_(\d+)$/);
 
   if (taskInProgressMatch || taskOtkMatch || taskBlockedMatch || taskDoneMatch) {
     let taskId = 0;
@@ -73,17 +173,23 @@ export async function handleIncomingBotMessage(
       newStatus = 'DONE';
     }
 
-    // Verify task belongs to or is assigned to this user
+    // Verify task belongs to or is assigned to this user (or user is admin/GIP)
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      include: { project: true, assignees: true },
+      include: {
+        project: {
+          include: { manager: true },
+        },
+        assignees: true,
+      },
     });
 
     const isAssigned = task?.assignees.some((a: any) => a.id === user.id);
+    const isPrivileged = user.role === 'ADMIN' || user.role === 'GIP';
 
-    if (!task || !isAssigned) {
+    if (!task || (!isAssigned && !isPrivileged)) {
       return {
-        replyText: 'Ошибка: Задача не найдена или назначена другому исполнителю.',
+        replyText: '⚠️ Ошибка: Задача не найдена или назначена другому исполнителю.',
       };
     }
 
@@ -102,6 +208,9 @@ export async function handleIncomingBotMessage(
           status: 'ACTIVE',
         },
       });
+
+      // Notify GIP about the manual block
+      await notifyManagersAboutBlocker(task.project, task, user, alertText);
     } else if (newStatus === 'DONE' || newStatus === 'IN_PROGRESS') {
       // Resolve any active alerts
       await prisma.alert.updateMany({
@@ -110,18 +219,29 @@ export async function handleIncomingBotMessage(
       });
     }
 
+    const statusLabels: Record<string, string> = {
+      IN_PROGRESS: '▶️ В работе',
+      OTK: '🔍 На проверке (ОТК)',
+      BLOCKED: '⚠️ Заблокировано (БЛОК)',
+      DONE: '✅ Завершено',
+    };
+
     return {
-      replyText: `Статус задачи "${task.name}" успешно изменен на: *${newStatus}*!`,
+      replyText: `Статус задачи *«${task.name}»* изменен на:\n*${statusLabels[newStatus] || newStatus}*`,
       updatedTask,
       createdAlert,
     };
   }
 
-  // 3. Command "/start" or "Привет" or "/tasks"
-  const cleanText = text.trim();
-  if (cleanText === '/start' || cleanText.toLowerCase() === 'привет') {
+  // 3. Command "/start", "Привет", "/tasks", "/help"
+  if (cleanText === '/start' || cleanText.toLowerCase() === 'привет' || cleanText === '/help') {
     return {
-      replyText: `Здравствуйте, *${user.name}*!\n\nВы авторизованы как *${user.role}*.\n\nИспользуйте команду /tasks, чтобы посмотреть свои активные задачи, или просто пишите отчеты свободным текстом (наш ИИ автоматически распознает проблемы и обновит статусы).`,
+      replyText:
+        `👋 Здравствуйте, *${user.name}*!\n\n` +
+        `Вы авторизованы в системе как *${user.role}* (${user.title || 'Специалист'}).\n\n` +
+        `📌 *Команды бота:*\n` +
+        `• \`/tasks\` — список ваших активных задач с кнопками переключения статусов\n` +
+        `• *Текстовый отчет* — просто напишите своими словами, что сделано или что мешает работе (ИИ сам обновит статус и при необходимости уведомит ГИПа).`,
     };
   }
 
@@ -129,7 +249,7 @@ export async function handleIncomingBotMessage(
     const activeTasks = await prisma.task.findMany({
       where: {
         assignees: {
-          some: { id: user.id }
+          some: { id: user.id },
         },
         status: { not: 'DONE' },
       },
@@ -138,20 +258,27 @@ export async function handleIncomingBotMessage(
 
     if (activeTasks.length === 0) {
       return {
-        replyText: 'У вас нет активных (незавершенных) задач на данный момент. Отличная работа! 🎉',
+        replyText: 'У вас нет активных (незавершенных) задач на данный момент. Все разделы закрыты! 🎉',
       };
     }
 
-    let replyText = '📋 *Ваши активные задачи:*\n\n';
+    let replyText = '📋 *Ваши активные задачи и разделы:*\n\n';
     const inlineKeyboard: any[] = [];
 
     activeTasks.forEach((task, idx) => {
-      replyText += `${idx + 1}. *${task.name}* (Проект: ${task.project.name})\n`;
-      replyText += `   Статус: ${task.status}\n`;
-      if (task.description) replyText += `   Описание: ${task.description}\n`;
+      const statusIcons: Record<string, string> = {
+        PENDING: '⏳ Ожидает',
+        IN_PROGRESS: '▶️ В работе',
+        OTK: '🔍 ОТК',
+        BLOCKED: '⚠️ БЛОКЕР',
+      };
+
+      replyText += `${idx + 1}. *${task.name}* (Объект: _${task.project.name}_)\n`;
+      replyText += `   Статус: *${statusIcons[task.status] || task.status}*\n`;
+      if (task.description) replyText += `   Инфо: ${task.description}\n`;
       replyText += '\n';
 
-      // Buttons for each task
+      // Quick action buttons for this task
       const buttonsRow = [];
       if (task.status !== 'IN_PROGRESS') {
         buttonsRow.push({ text: '▶️ В работу', callback_data: `task_inprogress_${task.id}` });
@@ -178,32 +305,36 @@ export async function handleIncomingBotMessage(
   const activeTasks = await prisma.task.findMany({
     where: {
       assignees: {
-        some: { id: user.id }
+        some: { id: user.id },
       },
       status: { not: 'DONE' },
     },
-    include: { project: true },
+    include: {
+      project: {
+        include: { manager: true },
+      },
+    },
   });
 
   if (activeTasks.length === 0) {
     return {
-      replyText: 'Вы отправили текстовый отчет, но у вас нет активных задач в системе, к которым можно его привязать.',
+      replyText: 'Вы отправили текстовое сообщение, но у вас нет активных задач в системе, к которым можно привязать отчет.',
     };
   }
 
-  const targetTask = activeTasks.find(t => t.status === 'IN_PROGRESS') || activeTasks[0];
+  const targetTask = activeTasks.find((t) => t.status === 'IN_PROGRESS') || activeTasks[0];
 
   const aiResult = await analyzeReport(cleanText);
-  let replyText = `🤖 *ИИ-Ассистент AE-Automation проанализировал ваш отчет:*\n\n`;
-  replyText += `• Задача: *${targetTask.name}*\n`;
-  replyText += `• Обнаружена проблема/блок: *${aiResult.isBlock ? 'Да ⚠️' : 'Нет'}*\n`;
+  let replyText = `🤖 *ИИ-Анализ отчета (AE Automation):*\n\n`;
+  replyText += `• Задача: *${targetTask.name}* (_${targetTask.project.name}_)\n`;
+  replyText += `• Блокер / проблема: *${aiResult.isBlock ? 'Да ⚠️' : 'Нет'}*\n`;
   if (aiResult.isBlock && aiResult.summary) {
     replyText += `• Суть проблемы: _${aiResult.summary}_\n`;
   }
   if (aiResult.status) {
-    replyText += `• Предложено сменить статус на: *${aiResult.status}*\n`;
+    replyText += `• Рекомендуемый статус: *${aiResult.status}*\n`;
   }
-  replyText += `• Пояснение ИИ: _${aiResult.explanation}_\n\n`;
+  replyText += `• Анализ: _${aiResult.explanation}_\n\n`;
 
   let updatedTask = null;
   let createdAlert = null;
@@ -220,17 +351,22 @@ export async function handleIncomingBotMessage(
       where: { id: targetTask.id },
       data: updates,
     });
-    replyText += `✅ Статус задачи автоматически обновлен на *${updates.status}* в веб-панели.`;
-    
+    replyText += `✅ Статус задачи обновлен на *${updates.status}* в веб-панели.`;
+
     if (aiResult.isBlock) {
+      const alertReason = aiResult.summary || cleanText;
       createdAlert = await prisma.alert.create({
         data: {
           taskId: targetTask.id,
-          text: aiResult.summary || cleanText,
+          text: alertReason,
           status: 'ACTIVE',
         },
       });
-      replyText += ` ГИП получил уведомление о блокировке.`;
+
+      // Send Instant Push Alert to GIP / Managers
+      await notifyManagersAboutBlocker(targetTask.project, targetTask, user, alertReason);
+
+      replyText += `\n🚨 *ГИП и руководство получили мгновенное уведомление в Telegram.*`;
     } else {
       // Resolve any active alerts
       await prisma.alert.updateMany({
@@ -239,7 +375,7 @@ export async function handleIncomingBotMessage(
       });
     }
   } else {
-    replyText += `Статус задачи не изменился. Отчет сохранен в логах.`;
+    replyText += `Статус задачи не изменился. Отчет зафиксирован.`;
   }
 
   return {

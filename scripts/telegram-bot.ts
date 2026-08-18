@@ -10,14 +10,27 @@ if (!token) {
   process.exit(0);
 }
 
-// Initialize Telegram Bot with polling
-const bot = new TelegramBot(token, { polling: true });
+// Initialize Telegram Bot without auto polling first
+const bot = new TelegramBot(token, { polling: false });
 
-console.log('🤖 Telegram-бот успешно запущен в режиме Long Polling...');
+async function start() {
+  try {
+    // Delete any webhook that might be active so polling doesn't conflict
+    await bot.deleteWebHook();
+    await bot.startPolling();
+    console.log('🤖 Telegram-бот успешно запущен в режиме Long Polling...');
+  } catch (err) {
+    console.error('Ошибка инициализации polling бота:', err);
+  }
+}
+
+start();
 
 // Handle text messages and shared contacts
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id.toString();
+  const telegramId = msg.from?.id?.toString();
+  const username = msg.from?.username;
   const text = msg.text || '';
 
   try {
@@ -25,31 +38,23 @@ bot.on('message', async (msg) => {
     if (msg.contact) {
       const phone = msg.contact.phone_number;
       console.log(`[BOT] Получен контакт от пользователя: ${msg.from?.first_name} (${phone})`);
-      console.log(`[BOT] Запрос к базе данных для авторизации по контакту ${phone}...`);
-      const response = await handleIncomingBotMessage({ phone, telegramId: chatId }, '/start');
-      console.log(`[BOT] Ответ из базы данных по контакту получен. Текст ответа: "${response.replyText.substring(0, 50)}..."`);
+      const response = await handleIncomingBotMessage({ phone, telegramId: chatId, username }, '/start');
       
-      console.log(`[BOT] Отправляем приветствие после авторизации на chat_id ${chatId}...`);
       await bot.sendMessage(chatId, response.replyText, {
         parse_mode: 'Markdown',
         reply_markup: {
           remove_keyboard: true,
         },
       });
-      console.log(`[BOT] Приветствие успешно отправлено на chat_id ${chatId}`);
       return;
     }
 
     // 2. If it's a standard text message / command
     console.log(`[BOT] Получено сообщение от chat_id ${chatId}: "${text}"`);
-    
-    console.log(`[BOT] Запрос к базе данных для telegramId ${chatId}...`);
-    const response = await handleIncomingBotMessage({ telegramId: chatId }, text);
-    console.log(`[BOT] Ответ из базы данных получен. Текст ответа: "${response.replyText.substring(0, 50)}..."`);
+    const response = await handleIncomingBotMessage({ telegramId: chatId, username }, text);
 
     // If user is not found, offer them to share contact
     if (response.isUnregistered) {
-      console.log(`[BOT] Пользователь не найден. Отправляем запрос контакта на chat_id ${chatId}...`);
       await bot.sendMessage(chatId, response.replyText, {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -60,7 +65,6 @@ bot.on('message', async (msg) => {
           resize_keyboard: true
         }
       });
-      console.log(`[BOT] Запрос контакта успешно отправлен на chat_id ${chatId}`);
     } else {
       // Send regular message with keyboard if available
       const options: any = {
@@ -71,9 +75,7 @@ bot.on('message', async (msg) => {
         options.reply_markup = response.keyboard;
       }
 
-      console.log(`[BOT] Отправляем обычный ответ на chat_id ${chatId}...`);
       await bot.sendMessage(chatId, response.replyText, options);
-      console.log(`[BOT] Ответ успешно отправлен на chat_id ${chatId}`);
     }
   } catch (error) {
     console.error('[BOT] Ошибка обработки сообщения в Telegram-боте:', error);
@@ -92,11 +94,12 @@ bot.on('callback_query', async (callbackQuery) => {
 
   const chatId = message.chat.id.toString();
   const telegramId = callbackQuery.from.id.toString();
+  const username = callbackQuery.from.username;
   const data = callbackQuery.data || '';
 
   try {
     console.log(`Получен клик по кнопке от telegramId ${telegramId}: "${data}"`);
-    const response = await handleIncomingBotMessage({ telegramId }, data);
+    const response = await handleIncomingBotMessage({ telegramId, username }, data);
 
     await bot.sendMessage(chatId, response.replyText, {
       parse_mode: 'Markdown',

@@ -120,6 +120,31 @@ export default function Home() {
   const [newUserRole, setNewUserRole] = useState('ENGINEER');
   const [newUserTitle, setNewUserTitle] = useState('');
 
+  // Telegram Webhook Management State
+  const [webhookLog, setWebhookLog] = useState<{ success?: boolean; message?: string; configuredUrl?: string; currentWebhookInfo?: any; error?: string } | null>(null);
+  const [isConnectingWebhook, setIsConnectingWebhook] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+
+  const handleConnectWebhook = async () => {
+    setIsConnectingWebhook(true);
+    try {
+      const res = await fetch('/api/telegram/setup');
+      const data = await res.json();
+      setWebhookLog(data);
+    } catch (err: any) {
+      setWebhookLog({ success: false, message: 'Ошибка сети при подключении Webhook: ' + err.message });
+    } finally {
+      setIsConnectingWebhook(false);
+    }
+  };
+
+  const handleCopyInvite = () => {
+    const text = `👋 Коллеги, мы запустили Telegram-бота для фиксации статусов и задач!\n\n1️⃣ Откройте бота: https://t.me/your_bot_username\n2️⃣ Нажмите /start и кнопку «📱 Поделиться контактом» (или отправьте свой номер телефона)\n3️⃣ Нажмите /tasks, чтобы увидеть текущие задачи\n\n💡 Если у вас возник блокер или задержка от смежников (АР, КР, ОВ, ВК, ЭОМ) — просто напишите текстом в бот (например: «Ждем подоснову от ОВ»), ИИ сам зафиксирует проблему и уведомит ГИПа!`;
+    navigator.clipboard.writeText(text);
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 3000);
+  };
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch initial data
@@ -1378,6 +1403,90 @@ export default function Home() {
 
           {activeTab === 'admin' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+              {/* Telegram Webhook & Onboarding Section */}
+              <section className="form-card" style={{ border: '1px solid rgba(14, 165, 233, 0.3)', background: 'linear-gradient(180deg, rgba(14, 165, 233, 0.05) 0%, rgba(15, 23, 42, 0.6) 100%)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px', marginBottom: '15px' }}>
+                  <div>
+                    <h2 className="form-title" style={{ color: 'var(--accent-cyan)', marginBottom: '4px' }}>
+                      🤖 Telegram Webhook & Внедрение для инженеров
+                    </h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      Серверный режим 24/7 на Vercel (0 серверов, мгновенные уведомления ГИПу о блокерах).
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleConnectWebhook}
+                    disabled={isConnectingWebhook}
+                    className="inline-btn"
+                    style={{
+                      background: 'var(--accent-cyan)',
+                      color: '#000',
+                      borderColor: 'var(--accent-cyan)',
+                      fontWeight: 700,
+                      padding: '8px 16px',
+                      fontSize: '0.9rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    {isConnectingWebhook ? '⏳ Подключение...' : '🚀 Привязать Webhook к Vercel'}
+                  </button>
+                </div>
+
+                {webhookLog && (
+                  <div
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      marginBottom: '15px',
+                      fontSize: '0.85rem',
+                      background: webhookLog.success ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                      border: `1px solid ${webhookLog.success ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                      color: webhookLog.success ? '#4ade80' : '#f87171',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                      {webhookLog.message || (webhookLog.success ? '✅ Webhook успешно настроен!' : '❌ Ошибка настройки')}
+                    </div>
+                    {webhookLog.configuredUrl && (
+                      <div style={{ color: '#cbd5e1', fontSize: '0.8rem' }}>
+                        🔗 Webhook URL: <code>{webhookLog.configuredUrl}</code>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Onboarding instructions template for engineers */}
+                <div style={{ background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-orange)' }}>
+                      📋 Текст-приглашение для чата проектировщиков / инженеров:
+                    </span>
+                    <button
+                      onClick={handleCopyInvite}
+                      className="inline-btn"
+                      style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                    >
+                      {copiedInvite ? '✅ Скопировано!' : '📋 Скопировать текст'}
+                    </button>
+                  </div>
+                  <pre
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      color: '#94a3b8',
+                      fontSize: '0.82rem',
+                      lineHeight: '1.45',
+                      margin: 0,
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    {`👋 Коллеги, мы запустили систему управления задачами и фиксации блокеров в Telegram!\n\n1️⃣ Откройте бота: https://t.me/your_bot_username\n2️⃣ Нажмите /start и кнопку «📱 Поделиться контактом» (или отправьте свой номер телефона)\n3️⃣ Нажмите /tasks, чтобы увидеть текущие задачи и разделы\n\n💡 Если у вас возник блокер или задержка от смежников (АР, КР, ОВ, ВК, ЭОМ) — просто напишите текстом в бот (например: «Ждем подоснову от ОВ»), ИИ сам зафиксирует проблему и уведомит ГИПа!`}
+                  </pre>
+                </div>
+              </section>
+
               {/* Add Employee Form */}
               <section className="form-card">
                 <h2 className="form-title">👤 Добавить Сотрудника</h2>
