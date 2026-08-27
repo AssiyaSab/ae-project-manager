@@ -149,11 +149,14 @@ export default function Home() {
 
   // Fetch initial data
   const refreshData = async () => {
+    const pass = adminPassword || localStorage.getItem('ae_admin_password') || '';
+    if (!pass) return;
     try {
+      const headers = { 'x-auth-password': pass };
       const [pRes, uRes, aRes] = await Promise.all([
-        fetch('/api/projects').then(r => r.json()),
-        fetch('/api/users').then(r => r.json()),
-        fetch('/api/alerts').then(r => r.json())
+        fetch('/api/projects', { headers }).then(r => r.json()),
+        fetch('/api/users', { headers }).then(r => r.json()),
+        fetch('/api/alerts', { headers }).then(r => r.json())
       ]);
       if (Array.isArray(pRes)) setProjects(pRes);
       if (Array.isArray(uRes)) setUsers(uRes);
@@ -163,9 +166,12 @@ export default function Home() {
     }
   };
 
+  // Fetch data whenever password changes
   useEffect(() => {
-    refreshData();
-  }, []);
+    if (adminPassword) {
+      refreshData();
+    }
+  }, [adminPassword]);
 
   // Load session from localStorage on mount
   useEffect(() => {
@@ -198,31 +204,33 @@ export default function Home() {
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginUserId) {
-      setLoginError('Пожалуйста, выберите пользователя.');
-      return;
-    }
-    const selectedUser = users.find(u => u.id === Number(loginUserId));
-    if (!selectedUser) {
-      setLoginError('Пользователь не найден.');
+    if (!loginPassword) {
+      setLoginError('Пожалуйста, введите пароль.');
       return;
     }
     
-    if (selectedUser.role === 'ADMIN') {
-      const expectedPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'AE_ADMIN_2026';
-      if (loginPassword !== expectedPassword) {
-        setLoginError('Неверный пароль ГИПа!');
-        return;
-      }
-    }
+    const expectedAdmin = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'AE_ADMIN_2026';
+    const expectedMember = process.env.NEXT_PUBLIC_MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
     
-    // Login successful
-    setCurrentUser(selectedUser);
-    setAdminPassword(loginPassword);
-    localStorage.setItem('ae_current_user', JSON.stringify(selectedUser));
-    localStorage.setItem('ae_admin_password', loginPassword);
-    setShowLoginModal(false);
-    setLoginError('');
+    if (loginPassword === expectedAdmin) {
+      const adminUser = { id: 0, name: 'ГИП (Админ)', role: 'ADMIN', isActive: true };
+      setCurrentUser(adminUser as any);
+      setAdminPassword(loginPassword);
+      localStorage.setItem('ae_current_user', JSON.stringify(adminUser));
+      localStorage.setItem('ae_admin_password', loginPassword);
+      setShowLoginModal(false);
+      setLoginError('');
+    } else if (loginPassword === expectedMember) {
+      const memberUser = { id: 999, name: 'Сотрудник', role: 'ENGINEER', isActive: true };
+      setCurrentUser(memberUser as any);
+      setAdminPassword(loginPassword);
+      localStorage.setItem('ae_current_user', JSON.stringify(memberUser));
+      localStorage.setItem('ae_admin_password', loginPassword);
+      setShowLoginModal(false);
+      setLoginError('');
+    } else {
+      setLoginError('Неверный пароль доступа!');
+    }
   };
 
   // Scroll to bottom of chat
@@ -1931,45 +1939,20 @@ export default function Home() {
             
             <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label" style={{ color: '#94a3b8' }}>Выберите сотрудника</label>
-                <select 
-                  className="form-select" 
+                <label className="form-label" style={{ color: '#94a3b8' }}>Введите пароль доступа</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Введите пароль..."
                   style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', height: '42px' }}
-                  value={loginUserId}
+                  value={loginPassword}
                   onChange={(e) => {
-                    setLoginUserId(e.target.value);
-                    setLoginPassword('');
+                    setLoginPassword(e.target.value);
                     setLoginError('');
                   }}
                   required
-                >
-                  <option value="">-- Выберите из списка --</option>
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role === 'ADMIN' ? 'ГИП' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
-
-              {/* Show password field only if the selected user is ADMIN */}
-              {users.find(u => u.id === Number(loginUserId))?.role === 'ADMIN' && (
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ color: '#94a3b8' }}>Пароль ГИПа</label>
-                  <input 
-                    type="password" 
-                    className="form-input" 
-                    placeholder="Введите пароль..."
-                    style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', height: '42px' }}
-                    value={loginPassword}
-                    onChange={(e) => {
-                      setLoginPassword(e.target.value);
-                      setLoginError('');
-                    }}
-                    required
-                  />
-                </div>
-              )}
 
               {loginError && (
                 <div style={{ color: '#ff3344', fontSize: '0.82rem', fontWeight: 500, padding: '8px 12px', background: 'rgba(255, 51, 68, 0.1)', border: '1px solid rgba(255, 51, 68, 0.2)', borderRadius: '8px' }}>

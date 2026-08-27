@@ -3,13 +3,23 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-function validateAdmin(request: Request) {
-  const adminPassword = request.headers.get('x-admin-password');
-  const expectedPassword = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  return adminPassword === expectedPassword;
+function validateAuth(request: Request) {
+  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
+  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
+  const expectedMember = process.env.MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
+  return authPassword === expectedAdmin || authPassword === expectedMember;
 }
 
-export async function GET() {
+function validateAdmin(request: Request) {
+  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
+  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
+  return authPassword === expectedAdmin;
+}
+
+export async function GET(request: Request) {
+  if (!validateAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   try {
     const projects = await prisma.project.findMany({
       include: {
