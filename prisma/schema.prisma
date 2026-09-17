@@ -10,41 +10,48 @@ datasource db {
 }
 
 model User {
-  id              Int       @id @default(autoincrement())
-  name            String
-  phone           String?   @unique
-  telegramId      String?   @unique
-  role            String    // "ADMIN" | "ENGINEER" | "ASSEMBLER"
-  title           String?   // Job title / designation
-  isActive        Boolean   @default(true) // Status of employee (active or archived)
-  tasks           Task[]
-  managedProjects Project[] @relation("ProjectManager")
+  id               Int               @id @default(autoincrement())
+  name             String
+  phone            String?           @unique
+  telegramId       String?           @unique
+  role             String            // "ADMIN" | "ENGINEER" | "ASSEMBLER"
+  title            String?           // Job title / designation
+  isActive         Boolean           @default(true) // Status of employee (active or archived)
+  tasks            Task[]
+  managedProjects  Project[]         @relation("ProjectManager")
+  purchaseRequests PurchaseRequest[]
+  businessTrips    BusinessTrip[]
+  heldTools        Tool[]
+  toolLogs         ToolLog[]
 }
 
 model Project {
-  id          Int      @id @default(autoincrement())
-  name        String
-  description String?
-  status      String   // "DESIGN" | "PURCHASE" | "ASSEMBLY" | "COMMISSIONING" | "DONE"
-  budget      Float?   // <-- ДОБАВИЛИ: Общий бюджет проекта (например, сумма договора в тенге)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  tasks       Task[]
-  managerId   Int?
-  manager     User?    @relation("ProjectManager", fields: [managerId], references: [id])
+  id               Int               @id @default(autoincrement())
+  name             String
+  description      String?
+  status           String            // "DESIGN" | "PURCHASE" | "ASSEMBLY" | "COMMISSIONING" | "DONE"
+  budget           Float?            // Общий бюджет проекта
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  tasks            Task[]
+  managerId        Int?
+  manager          User?             @relation("ProjectManager", fields: [managerId], references: [id])
+  purchaseRequests PurchaseRequest[]
+  businessTrips    BusinessTrip[]
+  toolLogs         ToolLog[]
 }
 
 model Task {
-  id           Int      @id @default(autoincrement())
-  projectId    Int
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name         String
-  description  String?
-  status       String   // "PENDING" | "IN_PROGRESS" | "OTK" | "BLOCKED" | "DONE"
-  cost         Float?   // <-- ДОБАВИЛИ: Фактические затраты на эту конкретную задачу
-  assignees    User[]
-  alerts       Alert[]
-  updatedAt    DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  status      String   // "PENDING" | "IN_PROGRESS" | "OTK" | "BLOCKED" | "DONE"
+  cost        Float?   // Фактические затраты на эту конкретную задачу
+  assignees   User[]
+  alerts      Alert[]
+  updatedAt   DateTime @updatedAt
 }
 
 model Alert {
@@ -54,4 +61,65 @@ model Alert {
   text      String
   status    String   // "ACTIVE" | "RESOLVED"
   createdAt DateTime @default(now())
+}
+
+// --- НОВЫЕ МОДЕЛИ ---
+
+model PurchaseRequest {
+  id          Int      @id @default(autoincrement())
+  title       String
+  amount      Float
+  projectId   Int
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fileUrl     String?  // Ссылка на скан/чек (Google Drive и т.д.)
+  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "PAID"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  requesterId Int?
+  requester   User?    @relation(fields: [requesterId], references: [id])
+}
+
+model BusinessTrip {
+  id          Int      @id @default(autoincrement())
+  employeeId  Int
+  employee    User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  destination String
+  purpose     String
+  startDate   DateTime
+  endDate     DateTime
+  budget      Float    // Плановый бюджет (суточные + проезд + проживание)
+  projectId   Int?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  status      String   @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED" | "COMPLETED"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Tool {
+  id           Int       @id @default(autoincrement())
+  name         String
+  serialNumber String?
+  category     String    // "Электроинструмент", "Измерительные приборы", "Ручной инструмент"
+  status       String    @default("AVAILABLE") // "AVAILABLE" | "IN_USE" | "REPAIR" | "WRITTEN_OFF"
+  holderId     Int?
+  holder       User?     @relation(fields: [holderId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  logs         ToolLog[]
+}
+
+model ToolLog {
+  id                Int       @id @default(autoincrement())
+  toolId            Int
+  tool              Tool      @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  employeeId        Int
+  employee          User      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  projectId         Int?
+  project           Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  issueDate         DateTime  @default(now())
+  plannedReturnDate DateTime?
+  actualReturnDate  DateTime?
+  condition         String?   // Состояние при возврате
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }

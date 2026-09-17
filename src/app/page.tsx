@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import PurchasesTab from '@/components/PurchasesTab';
+import ToolsTab from '@/components/ToolsTab';
+import AccountingTab from '@/components/AccountingTab';
 
 interface User {
   id: number;
@@ -57,7 +60,7 @@ interface ChatMessage {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'tools' | 'accounting'>('dashboard');
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -818,16 +821,38 @@ export default function Home() {
             >
               ⚠️ Алерты ({alerts.filter(a => a.status === 'ACTIVE').length})
             </button>
+            
+            <button 
+              className={`nav-btn ${activeTab === 'purchases' ? 'active' : ''}`}
+              onClick={() => setActiveTab('purchases')}
+            >
+              🛒 Закупки
+            </button>
+            <button 
+              className={`nav-btn ${activeTab === 'tools' ? 'active' : ''}`}
+              onClick={() => setActiveTab('tools')}
+            >
+              📦 Инструменты
+            </button>
+            
             {currentUser?.role === 'ADMIN' && (
-              <button 
-                className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('admin');
-                  refreshData();
-                }}
-              >
-                ⚙️ Админка
-              </button>
+              <>
+                <button 
+                  className={`nav-btn ${activeTab === 'accounting' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('accounting')}
+                >
+                  📊 Бухгалтерия
+                </button>
+                <button 
+                  className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('admin');
+                    refreshData();
+                  }}
+                >
+                  ⚙️ Админка
+                </button>
+              </>
             )}
           </nav>
           
@@ -1666,6 +1691,18 @@ export default function Home() {
                 </div>
               </section>
             </div>
+          )}
+
+          {activeTab === 'purchases' && (
+            <PurchasesTab currentUser={currentUser} projects={projects} users={users} />
+          )}
+
+          {activeTab === 'tools' && (
+            <ToolsTab currentUser={currentUser} projects={projects} users={users} />
+          )}
+
+          {activeTab === 'accounting' && (
+            <AccountingTab currentUser={currentUser} projects={projects} users={users} />
           )}
         </main>
       </div>
