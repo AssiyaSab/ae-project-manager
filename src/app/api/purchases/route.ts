@@ -3,21 +3,10 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-function validateAuth(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  const expectedMember = process.env.MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
-  return authPassword === expectedAdmin || authPassword === expectedMember;
-}
-
-function validateAdmin(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  return authPassword === expectedAdmin;
-}
+import { validateAuth, validateAdmin, createAuditLog } from '@/lib/auth';
 
 export async function GET(request: Request) {
-  if (!validateAuth(request)) {
+  if (!(await validateAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -36,7 +25,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!validateAuth(request)) {
+  if (!(await validateAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -81,6 +70,9 @@ export async function POST(request: Request) {
       console.error('Error sending TG notification for purchase:', tgError);
     }
 
+      const user = await validateAuth(request);
+      await createAuditLog(user?.id || null, 'CREATE_PURCHASE', `Создана заявка на закупку: ${purchase.title} (${purchase.amount} ₸)`);
+
     return NextResponse.json(purchase);
   } catch (error) {
     console.error('POST /api/purchases error:', error);
@@ -89,7 +81,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -112,6 +104,9 @@ export async function PATCH(request: Request) {
     // But tasks have "cost". Let's assume actual cost of the project is calculated dynamically 
     // from Tasks costs + Purchases amount, or we can just update a project field if it existed.
     // For now, calculating dynamically in the frontend or dashboard is best.
+
+    const user = await validateAuth(request);
+    await createAuditLog(user?.id || null, 'UPDATE_PURCHASE', `Обновлен статус заявки #${purchase.id} на ${status}`);
 
     return NextResponse.json(purchase);
   } catch (error) {

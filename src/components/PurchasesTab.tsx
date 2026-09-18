@@ -46,7 +46,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     try {
       await fetch('/api/purchases', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '' },
+        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           title: purchaseTitle,
           amount: purchaseAmount,
@@ -67,7 +67,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     try {
       await fetch('/api/trips', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '' },
+        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           employeeId: tripEmployee,
           destination: tripDest,
@@ -89,7 +89,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     if (currentUser?.role !== 'ADMIN') return;
     await fetch('/api/purchases', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '' },
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
       body: JSON.stringify({ id, status })
     });
     fetchData();
@@ -99,7 +99,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     if (currentUser?.role !== 'ADMIN') return;
     await fetch('/api/trips', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '' },
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
       body: JSON.stringify({ id, status })
     });
     fetchData();

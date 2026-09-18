@@ -44,7 +44,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     try {
       await fetch('/api/tools', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({ name: toolName, serialNumber: toolSerial, category: toolCategory })
       });
       setToolName(''); setToolSerial('');
@@ -60,7 +60,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     try {
       await fetch('/api/tools/logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           toolId: issueToolId,
           employeeId: issueEmployeeId,
@@ -83,7 +83,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     try {
       await fetch('/api/tools/logs', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           logId: returnLogId,
           toolId: log.toolId,

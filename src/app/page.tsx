@@ -73,6 +73,7 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   
   // Simulator State
   const [selectedPhone, setSelectedPhone] = useState<string>('');
@@ -115,6 +116,8 @@ export default function Home() {
   const [editUserPhone, setEditUserPhone] = useState('');
   const [editUserRole, setEditUserRole] = useState('');
   const [editUserTitle, setEditUserTitle] = useState('');
+  const [editUserLogin, setEditUserLogin] = useState('');
+  const [editUserPassword, setEditUserPassword] = useState('');
   const [editUserIsActive, setEditUserIsActive] = useState<boolean>(true);
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
 
@@ -122,6 +125,8 @@ export default function Home() {
   const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserRole, setNewUserRole] = useState('ENGINEER');
   const [newUserTitle, setNewUserTitle] = useState('');
+  const [newUserLogin, setNewUserLogin] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
 
   // Telegram Webhook Management State
   const [webhookLog, setWebhookLog] = useState<{ success?: boolean; message?: string; configuredUrl?: string; currentWebhookInfo?: any; error?: string } | null>(null);
@@ -153,9 +158,14 @@ export default function Home() {
   // Fetch initial data
   const refreshData = async () => {
     const pass = adminPassword || localStorage.getItem('ae_admin_password') || '';
+    const login = loginUserId || localStorage.getItem('ae_auth_login') || '';
     if (!pass) return;
     try {
-      const headers = { 'x-auth-password': pass };
+      const headers = { 
+        'x-auth-login': login,
+        'x-auth-password': pass,
+        'x-admin-password': pass 
+      };
       const expectedAdmin = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'AE_ADMIN_2026';
       const isAdmin = pass === expectedAdmin;
 
@@ -165,15 +175,21 @@ export default function Home() {
       ];
 
       if (isAdmin) {
-        requests.push(fetch('/api/alerts', { headers }).then(r => r.json()));
+        requests.push(
+          fetch('/api/alerts', { headers }).then(r => r.json()),
+          fetch('/api/audit', { headers }).then(r => r.json())
+        );
       }
 
       const results = await Promise.all(requests);
-      const [pRes, uRes, aRes] = results;
+      const [pRes, uRes, aRes, auditRes] = results;
 
       if (Array.isArray(pRes)) setProjects(pRes);
       if (Array.isArray(uRes)) setUsers(uRes);
-      if (isAdmin && Array.isArray(aRes)) setAlerts(aRes);
+      if (isAdmin) {
+        if (Array.isArray(aRes)) setAlerts(aRes);
+        if (Array.isArray(auditRes)) setAuditLogs(auditRes);
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -218,36 +234,46 @@ export default function Home() {
     setLoginError('');
   };
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginPassword) {
-      setLoginError('Пожалуйста, введите пароль.');
+    if (!loginUserId && !loginPassword) {
+      setLoginError('Пожалуйста, введите логин и пароль.');
       return;
     }
     
-    const expectedAdmin = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'AE_ADMIN_2026';
-    const expectedMember = process.env.NEXT_PUBLIC_MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
-    
-    if (loginPassword === expectedAdmin) {
-      const adminUser = { id: 0, name: 'ГИП (Админ)', role: 'ADMIN', isActive: true };
-      setCurrentUser(adminUser as any);
-      setAdminPassword(loginPassword);
-      localStorage.setItem('ae_current_user', JSON.stringify(adminUser));
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginUserId, password: loginPassword })
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        setLoginError(data.error || 'Ошибка авторизации');
+        return;
+      }
+
+      setCurrentUser(data);
+      // We store the password in state to pass it to APIs. In a real app we'd use a JWT.
+      setAdminPassword(loginPassword); 
+      // Also store login in localStorage so refreshData can use it
+      localStorage.setItem('ae_auth_login', loginUserId);
+
+      localStorage.setItem('ae_current_user', JSON.stringify(data));
       localStorage.setItem('ae_admin_password', loginPassword);
-      setActiveTab('dashboard');
+      
+      if (data.role === 'ADMIN') {
+        setActiveTab('dashboard');
+      } else {
+        setActiveTab('my-tasks');
+      }
+      
       setShowLoginModal(false);
       setLoginError('');
-    } else if (loginPassword === expectedMember) {
-      const memberUser = { id: 999, name: 'Сотрудник', role: 'ENGINEER', isActive: true };
-      setCurrentUser(memberUser as any);
-      setAdminPassword(loginPassword);
-      localStorage.setItem('ae_current_user', JSON.stringify(memberUser));
-      localStorage.setItem('ae_admin_password', loginPassword);
-      setActiveTab('my-tasks');
-      setShowLoginModal(false);
-      setLoginError('');
-    } else {
-      setLoginError('Неверный пароль доступа!');
+    } catch (err) {
+      console.error(err);
+      setLoginError('Ошибка сети');
     }
   };
 
@@ -347,7 +373,7 @@ export default function Home() {
     try {
       await fetch('/api/alerts', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({ alertId, status: 'RESOLVED' }),
       });
       refreshData();
@@ -363,7 +389,7 @@ export default function Home() {
     try {
       await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           name: projectName,
           description: projectDesc,
@@ -401,7 +427,7 @@ export default function Home() {
     try {
       await fetch('/api/projects', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           projectId: editingProjectId,
           name: editProjectName,
@@ -425,7 +451,7 @@ export default function Home() {
     try {
       await fetch('/api/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           projectId: taskProjectId,
           name: taskName,
@@ -452,7 +478,7 @@ export default function Home() {
     try {
       await fetch(`/api/projects?projectId=${projectId}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword || '' }
+        headers: { 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' }
       });
       refreshData();
     } catch (err) {
@@ -477,7 +503,7 @@ export default function Home() {
     try {
       await fetch('/api/tasks', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           taskId: editingTaskId,
           name: editTaskName,
@@ -500,7 +526,7 @@ export default function Home() {
     try {
       await fetch(`/api/tasks?taskId=${taskId}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword || '' }
+        headers: { 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' }
       });
       refreshData();
     } catch (err) {
@@ -515,6 +541,8 @@ export default function Home() {
     setEditUserPhone(user.phone || '');
     setEditUserRole(user.role);
     setEditUserTitle(user.title || '');
+    setEditUserLogin((user as any).login || '');
+    setEditUserPassword(''); // never populate password back
     setEditUserIsActive(user.isActive);
     setShowUserModal(true);
   };
@@ -526,13 +554,15 @@ export default function Home() {
     try {
       await fetch('/api/users', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           userId: editingUserId,
           name: editUserName,
           phone: editUserPhone || null,
           role: editUserRole,
           title: editUserTitle || null,
+          login: editUserLogin || null,
+          password: editUserPassword || undefined,
           isActive: editUserIsActive
         }),
       });
@@ -551,7 +581,7 @@ export default function Home() {
     try {
       await fetch('/api/users', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           userId: user.id,
           isActive: !user.isActive
@@ -569,7 +599,7 @@ export default function Home() {
     try {
       await fetch(`/api/users?userId=${userId}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': adminPassword || '' }
+        headers: { 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' }
       });
       refreshData();
     } catch (err) {
@@ -584,18 +614,22 @@ export default function Home() {
     try {
       await fetch('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
           name: newUserName,
           phone: newUserPhone || null,
           role: newUserRole,
-          title: newUserTitle || null
+          title: newUserTitle || null,
+          login: newUserLogin || null,
+          password: newUserPassword || null
         }),
       });
       setNewUserName('');
       setNewUserPhone('');
       setNewUserRole('ENGINEER');
       setNewUserTitle('');
+      setNewUserLogin('');
+      setNewUserPassword('');
       refreshData();
     } catch (err) {
       console.error(err);
@@ -761,7 +795,7 @@ export default function Home() {
         try {
           const res = await fetch('/api/users', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '' },
+            headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword || '', 'x-auth-password': adminPassword || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
             body: JSON.stringify({
               name,
               phone: phone || null,
@@ -1594,6 +1628,26 @@ export default function Home() {
                       onChange={(e) => setNewUserTitle(e.target.value)}
                     />
                   </div>
+                  <div className="form-group" style={{ flex: '1 1 200px', marginBottom: '0px' }}>
+                    <label className="form-label">Логин (для веб-портала)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="nickname" 
+                      value={newUserLogin}
+                      onChange={(e) => setNewUserLogin(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group" style={{ flex: '1 1 200px', marginBottom: '0px' }}>
+                    <label className="form-label">Пароль</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      placeholder="password123" 
+                      value={newUserPassword}
+                      onChange={(e) => setNewUserPassword(e.target.value)}
+                    />
+                  </div>
                   <button type="submit" className="btn-submit" style={{ alignSelf: 'flex-end', height: '42px', marginTop: '10px' }}>
                     Добавить сотрудника
                   </button>
@@ -1714,6 +1768,44 @@ export default function Home() {
                       История алертов пуста. Проблем на производстве не зафиксировано.
                     </div>
                   )}
+                </div>
+              </section>
+
+              {/* Audit Logs */}
+              <section className="form-card">
+                <h2 className="form-title">🔍 Журнал действий (Audit Logs)</h2>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Дата и Время</th>
+                        <th>Сотрудник</th>
+                        <th>Действие</th>
+                        <th>Детали</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.map(log => (
+                        <tr key={log.id}>
+                          <td>{new Date(log.createdAt).toLocaleString('ru-RU')}</td>
+                          <td>{log.user ? `${log.user.name} (${log.user.role})` : 'Система / Мастер-Админ'}</td>
+                          <td>
+                            <span className="badge" style={{ background: '#3b82f6', color: '#fff' }}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td>{log.details || '-'}</td>
+                        </tr>
+                      ))}
+                      {auditLogs.length === 0 && (
+                        <tr>
+                          <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                            Журнал действий пока пуст.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             </div>
@@ -1946,6 +2038,25 @@ export default function Home() {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Логин (веб-портал)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={editUserLogin}
+                  onChange={(e) => setEditUserLogin(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Сменить пароль (оставьте пустым, чтобы не менять)</label>
+                <input 
+                  type="password" 
+                  className="form-input" 
+                  placeholder="Новый пароль..."
+                  value={editUserPassword}
+                  onChange={(e) => setEditUserPassword(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label">Роль</label>
                 <select 
                   className="form-select" 
@@ -2037,6 +2148,20 @@ export default function Home() {
             
             <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ color: '#94a3b8' }}>Логин (телефон или никнейм)</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="Введите логин..."
+                  style={{ background: '#1f2937', color: '#fff', border: '1px solid #374151', height: '42px', marginBottom: '15px' }}
+                  value={loginUserId}
+                  onChange={(e) => {
+                    setLoginUserId(e.target.value);
+                    setLoginError('');
+                  }}
+                  required
+                />
+                
                 <label className="form-label" style={{ color: '#94a3b8' }}>Введите пароль доступа</label>
                 <input 
                   type="password" 

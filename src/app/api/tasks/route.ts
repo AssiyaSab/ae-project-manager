@@ -1,21 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-function validateAuth(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  const expectedMember = process.env.MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
-  return authPassword === expectedAdmin || authPassword === expectedMember;
-}
-
-function validateAdmin(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  return authPassword === expectedAdmin;
-}
+import { validateAuth, validateAdmin } from '@/lib/auth';
 
 export async function POST(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -50,7 +39,7 @@ export async function PATCH(request: Request) {
     }
 
     const isOnlyStatusUpdate = status !== undefined && name === undefined && description === undefined && assigneeIds === undefined && cost === undefined;
-    if (!isOnlyStatusUpdate && !validateAdmin(request)) {
+    if (!isOnlyStatusUpdate && !(await validateAdmin(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
@@ -80,7 +69,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

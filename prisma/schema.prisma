@@ -17,12 +17,15 @@ model User {
   role             String            // "ADMIN" | "ENGINEER" | "ASSEMBLER"
   title            String?           // Job title / designation
   isActive         Boolean           @default(true) // Status of employee (active or archived)
+  login            String?           @unique
+  password         String?
   tasks            Task[]
   managedProjects  Project[]         @relation("ProjectManager")
   purchaseRequests PurchaseRequest[]
   businessTrips    BusinessTrip[]
   heldTools        Tool[]
   toolLogs         ToolLog[]
+  auditLogs        AuditLog[]
 }
 
 model Project {
@@ -122,4 +125,13 @@ model ToolLog {
   condition         String?   // Состояние при возврате
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
 }

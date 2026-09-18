@@ -3,21 +3,10 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-function validateAuth(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  const expectedMember = process.env.MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
-  return authPassword === expectedAdmin || authPassword === expectedMember;
-}
-
-function validateAdmin(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  return authPassword === expectedAdmin;
-}
+import { validateAuth, validateAdmin, createAuditLog } from '@/lib/auth';
 
 export async function GET(request: Request) {
-  if (!validateAuth(request)) {
+  if (!(await validateAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -32,7 +21,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -49,6 +38,8 @@ export async function POST(request: Request) {
         title: title || null,
       },
     });
+    const currentUser = await validateAuth(request); 
+    await createAuditLog(currentUser?.id || null, 'CREATE_USER', `Добавлен сотрудник: ${user.name}`); 
     return NextResponse.json(user);
   } catch (error) {
     console.error('POST /api/users error:', error);
@@ -57,7 +48,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -84,7 +75,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

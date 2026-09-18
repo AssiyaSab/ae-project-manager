@@ -3,21 +3,10 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-function validateAuth(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  const expectedMember = process.env.MEMBER_PASSWORD || 'AE_EMPLOYEE_2026';
-  return authPassword === expectedAdmin || authPassword === expectedMember;
-}
-
-function validateAdmin(request: Request) {
-  const authPassword = request.headers.get('x-admin-password') || request.headers.get('x-auth-password');
-  const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  return authPassword === expectedAdmin;
-}
+import { validateAuth, validateAdmin } from '@/lib/auth';
 
 export async function GET(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Forbidden. Admin access required.' }, { status: 403 });
   }
   try {
@@ -40,7 +29,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!validateAdmin(request)) {
+  if (!(await validateAdmin(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
