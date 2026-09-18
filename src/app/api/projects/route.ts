@@ -20,6 +20,8 @@ export async function GET(request: Request) {
   if (!validateAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  const isAdmin = validateAdmin(request);
+
   try {
     const projects = await prisma.project.findMany({
       include: {
@@ -33,6 +35,19 @@ export async function GET(request: Request) {
       },
       orderBy: { createdAt: 'desc' },
     });
+
+    if (!isAdmin) {
+      const filteredProjects = projects.map(p => ({
+        ...p,
+        budget: null, // Скрываем бюджет от сотрудников
+        tasks: p.tasks.map(t => ({
+          ...t,
+          cost: null // Скрываем стоимость задач от сотрудников
+        }))
+      }));
+      return NextResponse.json(filteredProjects);
+    }
+
     return NextResponse.json(projects);
   } catch (error) {
     console.error('GET /api/projects error:', error);

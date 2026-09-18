@@ -60,7 +60,7 @@ interface ChatMessage {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'tools' | 'accounting'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'tools' | 'accounting' | 'my-tasks'>('dashboard');
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -156,14 +156,24 @@ export default function Home() {
     if (!pass) return;
     try {
       const headers = { 'x-auth-password': pass };
-      const [pRes, uRes, aRes] = await Promise.all([
+      const expectedAdmin = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'AE_ADMIN_2026';
+      const isAdmin = pass === expectedAdmin;
+
+      const requests = [
         fetch('/api/projects', { headers }).then(r => r.json()),
-        fetch('/api/users', { headers }).then(r => r.json()),
-        fetch('/api/alerts', { headers }).then(r => r.json())
-      ]);
+        fetch('/api/users', { headers }).then(r => r.json())
+      ];
+
+      if (isAdmin) {
+        requests.push(fetch('/api/alerts', { headers }).then(r => r.json()));
+      }
+
+      const results = await Promise.all(requests);
+      const [pRes, uRes, aRes] = results;
+
       if (Array.isArray(pRes)) setProjects(pRes);
       if (Array.isArray(uRes)) setUsers(uRes);
-      if (Array.isArray(aRes)) setAlerts(aRes);
+      if (isAdmin && Array.isArray(aRes)) setAlerts(aRes);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -188,6 +198,9 @@ export default function Home() {
           setAdminPassword(savedPassword);
         }
         setShowLoginModal(false);
+        if (u.role !== 'ADMIN') {
+          setActiveTab('my-tasks');
+        }
       } catch (e) {
         console.error(e);
       }
@@ -221,6 +234,7 @@ export default function Home() {
       setAdminPassword(loginPassword);
       localStorage.setItem('ae_current_user', JSON.stringify(adminUser));
       localStorage.setItem('ae_admin_password', loginPassword);
+      setActiveTab('dashboard');
       setShowLoginModal(false);
       setLoginError('');
     } else if (loginPassword === expectedMember) {
@@ -229,6 +243,7 @@ export default function Home() {
       setAdminPassword(loginPassword);
       localStorage.setItem('ae_current_user', JSON.stringify(memberUser));
       localStorage.setItem('ae_admin_password', loginPassword);
+      setActiveTab('my-tasks');
       setShowLoginModal(false);
       setLoginError('');
     } else {
@@ -798,29 +813,40 @@ export default function Home() {
             />
           </div>
           <nav className="dashboard-nav">
-            <button 
-              className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-              onClick={() => setActiveTab('dashboard')}
-            >
-              📊 Дашборд
-            </button>
             {currentUser?.role === 'ADMIN' && (
+              <>
+                <button 
+                  className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('dashboard')}
+                >
+                  📊 Дашборд
+                </button>
+                <button 
+                  className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('forms')}
+                >
+                  ➕ Добавить
+                </button>
+                <button 
+                  className={`nav-btn ${activeTab === 'alerts' ? 'active' : ''}`}
+                  onClick={() => {
+                    setActiveTab('alerts');
+                    refreshData();
+                  }}
+                >
+                  ⚠️ Алерты ({alerts.filter(a => a.status === 'ACTIVE').length})
+                </button>
+              </>
+            )}
+
+            {currentUser?.role !== 'ADMIN' && (
               <button 
-                className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
-                onClick={() => setActiveTab('forms')}
+                className={`nav-btn ${activeTab === 'my-tasks' ? 'active' : ''}`}
+                onClick={() => setActiveTab('my-tasks')}
               >
-                ➕ Добавить
+                📋 Мои задачи
               </button>
             )}
-            <button 
-              className={`nav-btn ${activeTab === 'alerts' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('alerts');
-                refreshData();
-              }}
-            >
-              ⚠️ Алерты ({alerts.filter(a => a.status === 'ACTIVE').length})
-            </button>
             
             <button 
               className={`nav-btn ${activeTab === 'purchases' ? 'active' : ''}`}
@@ -1693,6 +1719,39 @@ export default function Home() {
             </div>
           )}
 
+          {activeTab === 'my-tasks' && (
+            <section className="form-card">
+              <h2 className="form-title">📋 Мои задачи на производстве</h2>
+              {projects.map(p => {
+                const myTasks = p.tasks.filter(t => t.assignees?.some(a => a.id === currentUser?.id));
+                if (myTasks.length === 0) return null;
+                return (
+                  <div key={p.id} style={{ marginBottom: '20px' }}>
+                    <h3 style={{ color: 'var(--accent-cyan)', marginBottom: '10px' }}>Проект: {p.name}</h3>
+                    <div className="tasks-list">
+                      {myTasks.map(t => (
+                        <div key={t.id} className="task-item" style={{ borderLeft: `3px solid ${t.status === 'DONE' ? '#10b981' : t.status === 'BLOCKED' ? '#ef4444' : '#3b82f6'}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>{t.name}</div>
+                              {t.description && <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{t.description}</div>}
+                            </div>
+                            <span className={`badge ${t.status === 'DONE' ? 'done' : t.status === 'BLOCKED' ? 'blocked' : 'in_progress'}`}>
+                              {t.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {projects.every(p => p.tasks.filter(t => t.assignees?.some(a => a.id === currentUser?.id)).length === 0) && (
+                <div style={{ color: 'var(--text-muted)' }}>У вас пока нет активных задач.</div>
+              )}
+            </section>
+          )}
+
           {activeTab === 'purchases' && (
             <PurchasesTab currentUser={currentUser} projects={projects} users={users} />
           )}
@@ -1708,8 +1767,9 @@ export default function Home() {
       </div>
 
       {/* 2. Interactive Telegram Simulator Panel */}
-      <aside className="simulator-panel">
-        <div className="simulator-header">
+      {currentUser?.role === 'ADMIN' && (
+        <aside className="simulator-panel">
+          <div className="simulator-header">
           <h2 className="simulator-title">📱 Симулятор Telegram-Бота</h2>
           <p className="simulator-desc">Для тестирования логики инженеров в реальном времени</p>
         </div>
@@ -1822,6 +1882,7 @@ export default function Home() {
           </div>
         </div>
       </aside>
+      )}
 
       {/* 3. Edit Employee Modal */}
       {showUserModal && (

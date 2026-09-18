@@ -17,8 +17,8 @@ function validateAdmin(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!validateAuth(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!validateAdmin(request)) {
+    return NextResponse.json({ error: 'Forbidden. Admin access required.' }, { status: 403 });
   }
   try {
     const alerts = await prisma.alert.findMany({
