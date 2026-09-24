@@ -263,7 +263,7 @@ export default function Home() {
       localStorage.setItem('ae_current_user', JSON.stringify(data));
       localStorage.setItem('ae_admin_password', loginPassword);
       
-      if (data.role === 'ADMIN') {
+      if (data.role === 'ADMIN' || data.role === 'ACCOUNTANT' || data.role === 'MANAGER') {
         setActiveTab('dashboard');
       } else {
         setActiveTab('my-tasks');
@@ -847,14 +847,16 @@ export default function Home() {
             />
           </div>
           <nav className="dashboard-nav">
-            {currentUser?.role === 'ADMIN' && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER') && (
+              <button 
+                className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+                onClick={() => setActiveTab('dashboard')}
+              >
+                📊 Дашборд
+              </button>
+            )}
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
               <>
-                <button 
-                  className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('dashboard')}
-                >
-                  📊 Дашборд
-                </button>
                 <button 
                   className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
                   onClick={() => setActiveTab('forms')}
@@ -873,7 +875,7 @@ export default function Home() {
               </>
             )}
 
-            {currentUser?.role !== 'ADMIN' && (
+            {(currentUser?.role === 'ENGINEER' || currentUser?.role === 'ASSEMBLER') && (
               <button 
                 className={`nav-btn ${activeTab === 'my-tasks' ? 'active' : ''}`}
                 onClick={() => setActiveTab('my-tasks')}
@@ -895,30 +897,31 @@ export default function Home() {
               📦 Инструменты
             </button>
             
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER') && (
+              <button 
+                className={`nav-btn ${activeTab === 'accounting' ? 'active' : ''}`}
+                onClick={() => setActiveTab('accounting')}
+              >
+                📊 Бухгалтерия
+              </button>
+            )}
+            
             {currentUser?.role === 'ADMIN' && (
-              <>
-                <button 
-                  className={`nav-btn ${activeTab === 'accounting' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('accounting')}
-                >
-                  📊 Бухгалтерия
-                </button>
-                <button 
-                  className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('admin');
-                    refreshData();
-                  }}
-                >
-                  ⚙️ Админка
-                </button>
-              </>
+              <button 
+                className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('admin');
+                  refreshData();
+                }}
+              >
+                ⚙️ Админка
+              </button>
             )}
           </nav>
           
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
-              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
+              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
                 style={{
@@ -1017,7 +1020,7 @@ export default function Home() {
                               onChange={(e) => setEditProjectManagerId(e.target.value)}
                             >
                               <option value="">-- Не назначен --</option>
-                              {users.filter(u => u.isActive && (u.role === 'ADMIN' || u.role === 'ENGINEER')).map(u => (
+                              {users.filter(u => u.isActive && (u.role === 'ADMIN' || u.role === 'MANAGER' || u.role === 'ENGINEER')).map(u => (
                                 <option key={u.id} value={u.id}>{u.name} ({u.title || 'Руководитель'})</option>
                               ))}
                             </select>
@@ -1363,7 +1366,7 @@ export default function Home() {
                       onChange={(e) => setProjectManagerId(e.target.value)}
                     >
                       <option value="">-- Выберите руководителя --</option>
-                      {users.filter(u => u.isActive && (u.role === 'ADMIN' || u.role === 'ENGINEER')).map(u => (
+                      {users.filter(u => u.isActive && (u.role === 'ADMIN' || u.role === 'MANAGER' || u.role === 'ENGINEER')).map(u => (
                         <option key={u.id} value={u.id}>{u.name} ({u.title || 'Руководитель'})</option>
                       ))}
                     </select>
@@ -1614,6 +1617,8 @@ export default function Home() {
                       required
                     >
                       <option value="ADMIN">ГИП / Администратор</option>
+                      <option value="MANAGER">Руководитель</option>
+                      <option value="ACCOUNTANT">Бухгалтер</option>
                       <option value="ENGINEER">Инженер</option>
                       <option value="ASSEMBLER">Сборщик</option>
                     </select>
@@ -1702,8 +1707,8 @@ export default function Home() {
                             <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{u.phone || '—'}</td>
                             <td style={{ padding: '10px' }}>{u.title || '—'}</td>
                             <td style={{ padding: '10px' }}>
-                              <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
-                                {u.role === 'ADMIN' ? 'ГИП' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
+                              <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'manager' ? 'design' : u.role.toLowerCase() === 'accountant' ? 'purchase' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
+                                {u.role === 'ADMIN' ? 'ГИП' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
                               </span>
                             </td>
                             <td style={{ padding: '10px' }}>
@@ -2069,6 +2074,8 @@ export default function Home() {
                   required
                 >
                   <option value="ADMIN">ГИП / Администратор</option>
+                  <option value="MANAGER">Руководитель</option>
+                  <option value="ACCOUNTANT">Бухгалтер</option>
                   <option value="ENGINEER">Инженер</option>
                   <option value="ASSEMBLER">Сборщик</option>
                 </select>

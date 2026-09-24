@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-import { validateAuth, validateAdmin } from '@/lib/auth';
+import { validateAuth, validateAdmin, validateManager } from '@/lib/auth';
 
 export async function POST(request: Request) {
-  if (!(await validateAdmin(request))) {
+  if (!(await validateManager(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -39,7 +39,7 @@ export async function PATCH(request: Request) {
     }
 
     const isOnlyStatusUpdate = status !== undefined && name === undefined && description === undefined && assigneeIds === undefined && cost === undefined;
-    if (!isOnlyStatusUpdate && !(await validateAdmin(request))) {
+    if (!isOnlyStatusUpdate && !(await validateManager(request))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
@@ -69,7 +69,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!(await validateAdmin(request))) {
+  if (!(await validateManager(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

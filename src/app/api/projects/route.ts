@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-import { validateAuth, validateAdmin } from '@/lib/auth';
+import { validateAuth, validateAdmin, validateManager } from '@/lib/auth';
 
 export async function GET(request: Request) {
   if (!(await validateAuth(request))) {
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await validateAdmin(request))) {
+  if (!(await validateManager(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!(await validateAdmin(request))) {
+  if (!(await validateManager(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -98,7 +98,7 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!(await validateAdmin(request))) {
+  if (!(await validateManager(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

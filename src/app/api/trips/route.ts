@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-import { validateAuth, validateAdmin, createAuditLog } from '@/lib/auth';
+import { validateAuth, validateApprover, createAuditLog } from '@/lib/auth';
 
 export async function GET(request: Request) {
   if (!(await validateAuth(request))) {
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!(await validateAdmin(request))) {
+  if (!(await validateApprover(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
