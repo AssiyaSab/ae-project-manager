@@ -13,7 +13,15 @@ export async function POST(req: NextRequest) {
       const telegramId = msg.from?.id?.toString();
       const username = msg.from?.username;
       const phone = msg.contact?.phone_number;
-      const text = msg.text || (phone ? '/start' : '');
+      const text = msg.text || msg.caption || (phone ? '/start' : '');
+
+      let fileContext = null;
+      if (msg.document) {
+        fileContext = { type: 'document', fileId: msg.document.file_id, fileName: msg.document.file_name };
+      } else if (msg.photo && msg.photo.length > 0) {
+        // Photos are sent as an array of sizes, last one is the largest
+        fileContext = { type: 'photo', fileId: msg.photo[msg.photo.length - 1].file_id };
+      }
 
       if (!chatId) {
         return NextResponse.json({ ok: true, note: 'No chatId found' });
@@ -21,7 +29,10 @@ export async function POST(req: NextRequest) {
 
       const response = await handleIncomingBotMessage(
         { phone, telegramId, username },
-        text
+        text,
+        fileContext,
+        msg.message_id,
+        chatId
       );
 
       const options: any = {

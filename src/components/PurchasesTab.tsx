@@ -119,7 +119,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               <option value="">-- Выберите проект --</option>
               {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <input className="form-input" placeholder="Ссылка на скан/чек (Drive, Mail.ru)" value={purchaseFileUrl} onChange={e => setPurchaseFileUrl(e.target.value)} style={{ flex: '1 1 200px' }} />
+            <input className="form-input" placeholder="Ссылка на чек (или отправьте фото в Telegram-бот)" value={purchaseFileUrl} onChange={e => setPurchaseFileUrl(e.target.value)} style={{ flex: '1 1 200px' }} />
             <button className="btn-submit" type="submit" style={{ flex: '0 1 150px' }}>+ Создать</button>
           </form>
         )}

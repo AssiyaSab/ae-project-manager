@@ -92,6 +92,33 @@ export async function answerTelegramCallbackQuery(
   }
 }
 
+export async function forwardTelegramMessage(
+  chatId: string | number,
+  fromChatId: string | number,
+  messageId: string | number
+) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+
+  try {
+    const response = await fetch(`${TELEGRAM_API_BASE}${token}/forwardMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        from_chat_id: fromChatId,
+        message_id: messageId,
+      }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('❌ Failed to call Telegram forwardMessage:', error);
+    return null;
+  }
+}
+
 export async function setTelegramWebhook(webhookUrl: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not defined');

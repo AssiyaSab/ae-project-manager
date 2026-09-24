@@ -1,6 +1,6 @@
 import { prisma } from './db';
 import { analyzeReport } from './gemini';
-import { sendTelegramMessage } from './telegram';
+import { sendTelegramMessage, forwardTelegramMessage } from './telegram';
 
 export interface BotResponse {
   replyText: string;
@@ -22,27 +22,18 @@ async function notifyManagersAboutBlocker(
   try {
     const recipients = new Set<string>();
 
-    // 1. Project Manager if assigned and has Telegram
     if (project.manager?.telegramId) {
       recipients.add(project.manager.telegramId);
     }
 
-    // 2. All Admins / GIPs with linked Telegram
     const admins = await prisma.user.findMany({
-      where: {
-        role: { in: ['ADMIN', 'GIP'] },
-        telegramId: { not: null },
-        isActive: true,
-      },
+      where: { role: { in: ['ADMIN', 'GIP'] }, telegramId: { not: null }, isActive: true },
     });
 
     admins.forEach((admin) => {
-      if (admin.telegramId) {
-        recipients.add(admin.telegramId);
-      }
+      if (admin.telegramId) recipients.add(admin.telegramId);
     });
 
-    // Don't send notification to the author themselves if they are an admin
     if (user.telegramId) {
       recipients.delete(user.telegramId);
     }
@@ -66,7 +57,10 @@ async function notifyManagersAboutBlocker(
 
 export async function handleIncomingBotMessage(
   identifier: { phone?: string; telegramId?: string; username?: string },
-  text: string
+  text: string,
+  fileContext: any = null,
+  messageId: string | null = null,
+  chatId: string | null = null
 ): Promise<BotResponse> {
   const { phone, telegramId, username } = identifier;
   const cleanText = text.trim();
@@ -77,56 +71,29 @@ export async function handleIncomingBotMessage(
     user = await prisma.user.findUnique({ where: { telegramId } });
   }
 
-  // If not found by telegramId, check if phone was provided via contact or text
   let candidatePhone = phone;
   if (!candidatePhone) {
-    // Extract phone numbers from text (e.g. +77011234567, 87011234567, 77011234567)
     const phoneMatch = cleanText.match(/(?:\+?7|8)?[\s\-(\.]*(\d{3})[\s\-)\.]*(\d{3})[\s\-.]*(\d{2})[\s\-.]*(\d{2})/);
-    if (phoneMatch) {
-      candidatePhone = cleanText.replace(/[\s\-\(\)\.]/g, '');
-    }
+    if (phoneMatch) candidatePhone = cleanText.replace(/[\s\-\(\)\.]/g, '');
   }
 
   if (!user && candidatePhone) {
     const cleanPhoneDigits = candidatePhone.replace(/\D/g, '');
     if (cleanPhoneDigits.length >= 10) {
       const last10 = cleanPhoneDigits.substring(cleanPhoneDigits.length - 10);
-      user = await prisma.user.findFirst({
-        where: {
-          phone: {
-            contains: last10,
-          },
-        },
-      });
-
-      // Link telegramId if user found
+      user = await prisma.user.findFirst({ where: { phone: { contains: last10 } } });
       if (user && telegramId && !user.telegramId) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { telegramId },
-        });
+        user = await prisma.user.update({ where: { id: user.id }, data: { telegramId } });
       }
     }
   }
 
-  // Also check by username in user name or title if still not linked
   if (!user && username) {
     const cleanUsername = username.replace('@', '').toLowerCase();
-    const candidates = await prisma.user.findMany({
-      where: {
-        telegramId: null,
-      },
-    });
-
-    const matchedCandidate = candidates.find((c) =>
-      c.name.toLowerCase().includes(cleanUsername)
-    );
-
+    const candidates = await prisma.user.findMany({ where: { telegramId: null } });
+    const matchedCandidate = candidates.find((c) => c.name.toLowerCase().includes(cleanUsername));
     if (matchedCandidate && telegramId) {
-      user = await prisma.user.update({
-        where: { id: matchedCandidate.id },
-        data: { telegramId },
-      });
+      user = await prisma.user.update({ where: { id: matchedCandidate.id }, data: { telegramId } });
     }
   }
 
@@ -134,17 +101,47 @@ export async function handleIncomingBotMessage(
     return {
       replyText:
         `👋 Здравствуйте!\n\nВы еще не авторизованы в системе *AE Project Manager*.\n\n` +
-        `📱 Чтобы привязать свой аккаунт, нажмите кнопку *«Поделиться контактом»* ниже или просто отправьте свой номер телефона в чат (например: \`+77011234567\`).\n\n` +
+        `📱 Чтобы привязать свой аккаунт, нажмите кнопку *«Поделиться контактом»* ниже или просто отправьте свой номер телефона в чат.\n\n` +
         `_Ваш Telegram ID: \`${telegramId || 'Неизвестен'}\`_`,
       isUnregistered: true,
       keyboard: {
-        keyboard: [
-          [{ text: '📱 Поделиться контактом для авторизации', request_contact: true }],
-        ],
+        keyboard: [[{ text: '📱 Поделиться контактом для авторизации', request_contact: true }]],
         one_time_keyboard: true,
         resize_keyboard: true,
       },
     };
+  }
+
+  // 1.5 Handle File Upload (Document/Photo)
+  if (fileContext && messageId && chatId) {
+    // Notify all admins about the file
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ['ADMIN', 'GIP'] }, telegramId: { not: null }, isActive: true },
+    });
+    
+    let forwardedCount = 0;
+    for (const admin of admins) {
+      if (admin.telegramId && admin.telegramId !== telegramId) {
+        await sendTelegramMessage(
+          admin.telegramId, 
+          `📎 *Новый файл от сотрудника: ${user.name}* (${user.role})\n` +
+          `${cleanText ? `Комментарий: _${cleanText}_\n` : ''}` +
+          `Пересылаю сам файл:`
+        );
+        await forwardTelegramMessage(admin.telegramId, chatId, messageId);
+        forwardedCount++;
+      }
+    }
+
+    if (forwardedCount > 0) {
+      return {
+        replyText: `✅ Файл успешно получен и переслан руководству (ГИП).`,
+      };
+    } else {
+      return {
+        replyText: `✅ Файл получен. (Обратите внимание: в системе сейчас нет активных администраторов с привязанным Telegram).`,
+      };
+    }
   }
 
   // 2. Handle button callbacks (Inline Queries / Text Commands)
