@@ -1706,28 +1706,30 @@ export default function Home() {
                                 {u.role === 'ADMIN' ? 'ГИП' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
                               </span>
                             </td>
-                            <td style={{ padding: '10px', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                              <button 
-                                onClick={() => startEditingUser(u)} 
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '4px' }} 
-                                title="Редактировать сотрудника"
-                              >
-                                ✏️
-                              </button>
-                              <button 
-                                onClick={() => handleToggleUserActive(u)} 
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '4px' }} 
-                                title={u.isActive ? "Архивировать сотрудника" : "Восстановить из архива"}
-                              >
-                                {u.isActive ? "📦" : "🔄"}
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteUser(u.id)} 
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1rem', padding: '4px' }} 
-                                title="Удалить сотрудника из системы"
-                              >
-                                🗑️
-                              </button>
+                            <td style={{ padding: '10px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+                                <button 
+                                  onClick={() => startEditingUser(u)} 
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }} 
+                                  title="Редактировать сотрудника"
+                                >
+                                  ✏️
+                                </button>
+                                <button 
+                                  onClick={() => handleToggleUserActive(u)} 
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }} 
+                                  title={u.isActive ? "Архивировать сотрудника" : "Восстановить из архива"}
+                                >
+                                  {u.isActive ? "📦" : "🔄"}
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteUser(u.id)} 
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '1.2rem', padding: '4px' }} 
+                                  title="Удалить сотрудника из системы"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
