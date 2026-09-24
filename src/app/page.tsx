@@ -1639,6 +1639,7 @@ export default function Home() {
                       type="text" 
                       className="form-input" 
                       placeholder="nickname" 
+                      autoComplete="new-password"
                       value={newUserLogin}
                       onChange={(e) => setNewUserLogin(e.target.value)}
                     />
@@ -1649,6 +1650,7 @@ export default function Home() {
                       type="text" 
                       className="form-input" 
                       placeholder="password123" 
+                      autoComplete="new-password"
                       value={newUserPassword}
                       onChange={(e) => setNewUserPassword(e.target.value)}
                     />
@@ -2051,6 +2053,7 @@ export default function Home() {
                 <input 
                   type="text" 
                   className="form-input" 
+                  autoComplete="new-password"
                   value={editUserLogin}
                   onChange={(e) => setEditUserLogin(e.target.value)}
                 />
@@ -2061,6 +2064,7 @@ export default function Home() {
                   type="password" 
                   className="form-input" 
                   placeholder="Новый пароль..."
+                  autoComplete="new-password"
                   value={editUserPassword}
                   onChange={(e) => setEditUserPassword(e.target.value)}
                 />
