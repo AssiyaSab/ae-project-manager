@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    const { name, phone, role, title } = body;
+    const { name, phone, role, title, login, password } = body;
     if (!name || !role) {
       return NextResponse.json({ error: 'Name and role are required' }, { status: 400 });
     }
@@ -36,6 +36,8 @@ export async function POST(request: Request) {
         phone: phone || null,
         role,
         title: title || null,
+        login: login || null,
+        password: password || null,
       },
     });
     const currentUser = await validateAuth(request); 
@@ -53,7 +55,7 @@ export async function PATCH(request: Request) {
   }
   try {
     const body = await request.json();
-    const { userId, name, phone, role, title, isActive } = body;
+    const { userId, name, phone, role, title, isActive, login, password } = body;
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 });
     }
@@ -65,6 +67,8 @@ export async function PATCH(request: Request) {
         ...(role !== undefined && { role }),
         ...(title !== undefined && { title: title || null }),
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+        ...(login !== undefined && { login: login || null }),
+        ...(password !== undefined && password !== '' && { password }), // Only update password if provided
       },
     });
     return NextResponse.json(user);

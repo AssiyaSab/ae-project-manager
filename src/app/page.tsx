@@ -1997,6 +1997,8 @@ export default function Home() {
             width: '100%',
             maxWidth: '500px',
             margin: '20px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
             boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
             border: '1px solid var(--border-color)',
             background: '#151b26'
