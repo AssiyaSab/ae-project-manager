@@ -98,6 +98,55 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     }
   };
 
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    
+    // Dynamic import for xlsx to keep bundle light if possible, but static import is fine for React
+    const XLSX = await import('xlsx');
+    
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as string[][];
+        
+        // Skip header row
+        const parsedTools = data.slice(1).map(row => ({
+          name: row[0],
+          category: row[1] || 'Общее',
+          serialNumber: row[2] ? String(row[2]) : undefined,
+        })).filter(t => t.name); // only if name exists
+        
+        if (parsedTools.length === 0) {
+          alert("Не найдено валидных данных. Убедитесь, что колонки: Наименование, Категория, Серийный номер.");
+          return;
+        }
+
+        const res = await fetch('/api/tools/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+          body: JSON.stringify({ tools: parsedTools })
+        });
+        
+        if (res.ok) {
+          alert(`Успешно импортировано ${parsedTools.length} инструментов!`);
+          fetchTools();
+        } else {
+          alert("Ошибка при импорте.");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Ошибка при чтении файла");
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = ''; // reset
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
       
@@ -112,8 +161,13 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
               <option value="Электроинструмент">Электроинструмент</option>
               <option value="Измерительные приборы">Измерительные приборы</option>
               <option value="Ручной инструмент">Ручной инструмент</option>
+              <option value="Расходники">Расходники</option>
             </select>
             <button className="btn-submit" type="submit" style={{ flex: '0 1 150px' }}>+ Добавить</button>
+            <label className="inline-btn" style={{ cursor: 'pointer', background: 'rgba(255,255,255,0.08)', padding: '6px 12px', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', borderColor: 'rgba(255,255,255,0.2)', flex: '0 1 150px', justifyContent: 'center' }}>
+              📥 Импорт Excel
+              <input type="file" accept=".xlsx, .xls, .csv" onChange={handleImportExcel} style={{ display: 'none' }} />
+            </label>
           </form>
         </div>
       )}
