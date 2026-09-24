@@ -170,8 +170,8 @@ export default function Home() {
       const isAdmin = pass === expectedAdmin;
 
       const requests = [
-        fetch('/api/projects', { headers }).then(r => r.json()),
-        fetch('/api/users', { headers }).then(r => r.json())
+        fetch('/api/projects', { headers, cache: 'no-store' }).then(r => r.json()),
+        fetch('/api/users', { headers, cache: 'no-store' }).then(r => r.json())
       ];
 
       if (isAdmin) {
