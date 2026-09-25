@@ -86,7 +86,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   };
 
   const updatePurchaseStatus = async (id: number, status: string) => {
-    if (currentUser?.role !== 'ADMIN') return;
+    if (!['ADMIN', 'MANAGER'].includes(currentUser?.role)) return;
     await fetch('/api/purchases', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
@@ -96,7 +96,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   };
 
   const updateTripStatus = async (id: number, status: string) => {
-    if (currentUser?.role !== 'ADMIN') return;
+    if (!['ADMIN', 'MANAGER'].includes(currentUser?.role)) return;
     await fetch('/api/trips', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
@@ -111,7 +111,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
       {/* PURCHASES */}
       <div className="card">
         <h2 className="card-title">🛒 Заявки на закупку / Расходы</h2>
-        {currentUser?.role === 'ADMIN' && (
+        {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
           <form onSubmit={handlePurchaseSubmit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', padding: '15px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
             <input className="form-input" placeholder="Наименование (ТМЦ, Услуга)" value={purchaseTitle} onChange={e => setPurchaseTitle(e.target.value)} required style={{ flex: '1 1 200px' }} />
             <input className="form-input" type="number" placeholder="Сумма (KZT)" value={purchaseAmount} onChange={e => setPurchaseAmount(e.target.value)} required style={{ flex: '0 1 150px' }} />
@@ -134,7 +134,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                 <th style={{ padding: '10px', textAlign: 'left' }}>Проект</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Скан/Чек</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
-                {currentUser?.role === 'ADMIN' && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
+                {['ADMIN', 'MANAGER'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -156,7 +156,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                       {p.status}
                     </span>
                   </td>
-                  {currentUser?.role === 'ADMIN' && (
+                  {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px' }}>
                       {p.status === 'PENDING' && (
                         <>
@@ -182,7 +182,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
       {/* TRIPS */}
       <div className="card">
         <h2 className="card-title">✈️ Командировки</h2>
-        {currentUser?.role === 'ADMIN' && (
+        {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
           <form onSubmit={handleTripSubmit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '20px', padding: '15px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
             <select className="form-select" value={tripEmployee} onChange={e => setTripEmployee(e.target.value)} required style={{ flex: '1 1 150px' }}>
               <option value="">-- Сотрудник --</option>
@@ -218,7 +218,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                 <th style={{ padding: '10px', textAlign: 'left' }}>Проект</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Бюджет</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
-                {currentUser?.role === 'ADMIN' && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
+                {['ADMIN', 'MANAGER'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -238,7 +238,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                       {t.status}
                     </span>
                   </td>
-                  {currentUser?.role === 'ADMIN' && (
+                  {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px' }}>
                       {t.status === 'PENDING' && (
                         <>

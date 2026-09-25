@@ -151,7 +151,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
       
       {/* ADD TOOL */}
-      {currentUser?.role === 'ADMIN' && (
+      {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
         <div className="card">
           <h2 className="card-title">🔧 Добавить новый инструмент на склад</h2>
           <form onSubmit={handleToolSubmit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -184,7 +184,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
                 <th style={{ padding: '10px', textAlign: 'left' }}>Номер</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Ответственный</th>
-                {currentUser?.role === 'ADMIN' && <th style={{ padding: '10px', textAlign: 'left' }}>Управление</th>}
+                {['ADMIN', 'MANAGER'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Управление</th>}
               </tr>
             </thead>
             <tbody>
@@ -207,7 +207,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
                     <td style={{ padding: '10px' }}>
                       {t.holder ? <span>👤 {t.holder.name}</span> : '-'}
                     </td>
-                    {currentUser?.role === 'ADMIN' && (
+                    {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                       <td style={{ padding: '10px' }}>
                         {t.status === 'AVAILABLE' && (
                           <button onClick={() => setIssueToolId(t.id)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Выдать</button>
