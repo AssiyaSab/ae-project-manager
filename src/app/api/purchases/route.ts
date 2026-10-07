@@ -80,7 +80,6 @@ export async function POST(request: Request) {
       console.error('Error sending TG notification for purchase:', tgError);
     }
 
-      const user = await validateAuth(request);
       await createAuditLog(user?.id || null, 'CREATE_PURCHASE', `Создана заявка на закупку: ${purchase.title} (${purchase.amount} ₸)`);
 
     return NextResponse.json(purchase);

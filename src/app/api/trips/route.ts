@@ -82,7 +82,6 @@ export async function POST(request: Request) {
       console.error('Error sending TG notification for trip:', tgError);
     }
 
-    const user = await validateAuth(request); 
     await createAuditLog(user?.id || null, 'CREATE_TRIP', `Создана командировка: ${trip.destination}`); 
     return NextResponse.json(trip);
   } catch (error) {
