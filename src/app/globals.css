@@ -623,3 +623,8 @@ body {
     font-size: 0.85rem;
   }
 }
+
+.date-picker-wrapper .form-input { width: 125px; }
+.react-datepicker-wrapper { display: inline-block; }
+.react-datepicker__input-container input { width: 100%; }
+

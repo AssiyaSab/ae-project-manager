@@ -1,6 +1,9 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { ru } from 'date-fns/locale';
 
 export default function ToolsTab({ currentUser, projects, users }: any) {
   const [tools, setTools] = useState<any[]>([]);
@@ -342,7 +345,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
               </div>
               <div>
                 <label className="form-label">Дата планового возврата</label>
-                <input type="date" className="form-input" value={issueDate} onChange={e => setIssueDate(e.target.value)} />
+                <DatePicker selected={issueDate ? new Date(issueDate) : null} onChange={(date: Date | null) => setIssueDate(date ? date.toISOString().split('T')[0] : '')} dateFormat="dd/MM/yyyy" locale={ru} className="form-input" placeholderText="ДД/ММ/ГГГГ" />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="button" className="inline-btn" onClick={() => setIssueToolId(null)}>Отмена</button>
@@ -382,3 +385,5 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
+

@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '@/lib/formatters';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { ru } from 'date-fns/locale';
 
 export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -194,9 +197,9 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>С</span>
-              <input className="form-input" type="date" value={tripStart} onChange={e => setTripStart(e.target.value)} required style={{ width: '125px' }} />
+              <DatePicker selected={tripStart ? new Date(tripStart) : null} onChange={(date: Date | null) => setTripStart(date ? date.toISOString().split('T')[0] : '')} dateFormat="dd/MM/yyyy" locale={ru} className="form-input" placeholderText="ДД/ММ/ГГГГ" required wrapperClassName="date-picker-wrapper" />
               <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>ПО</span>
-              <input className="form-input" type="date" value={tripEnd} onChange={e => setTripEnd(e.target.value)} required style={{ width: '125px' }} />
+              <DatePicker selected={tripEnd ? new Date(tripEnd) : null} onChange={(date: Date | null) => setTripEnd(date ? date.toISOString().split('T')[0] : '')} dateFormat="dd/MM/yyyy" locale={ru} className="form-input" placeholderText="ДД/ММ/ГГГГ" required wrapperClassName="date-picker-wrapper" />
             </div>
 
             <input className="form-input" type="number" placeholder="Бюджет (KZT)" value={tripBudget} onChange={e => setTripBudget(e.target.value)} required style={{ flex: '0 1 150px' }} />
@@ -264,4 +267,6 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
+
 
