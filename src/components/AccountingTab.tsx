@@ -3,6 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '@/lib/formatters';
 import jsPDF from 'jspdf';
+import { useReactToPrint } from 'react-to-print';
+import { useRef } from 'react';
+import PrintTripOrder from './PrintTripOrder';
+import PrintPurchaseRequest from './PrintPurchaseRequest';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
@@ -53,52 +57,32 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
   };
 
   // Генерация PDF: Командировочное удостоверение
-  const generateTripPDF = (trip: any) => {
-    const doc = new jsPDF();
-    
-    // Using standard fonts for simple PDF since custom cyrillic fonts require base64 embedding
-    // We will use standard english/translit or simple PDF text. For full cyrillic support in jsPDF, 
-    // it's tricky without a font file. Let's use a workaround: replace cyrillic with basic translit 
-    // OR just use window.print() approach for complex docs? 
-    // Actually, modern browsers can just use window.print() to print HTML to PDF much easier and with full CSS!
-    // But the spec says "Подключить библиотеку генерации PDF (jspdf)". Let's try jsPDF.
-    
-    doc.setFont("helvetica"); // Note: Cyrillic might not work in standard helvetica.
-    // However, for the sake of the task, we will write it. If it fails, the user can adjust the font.
-    // A better approach for React without font headaches is often HTML-to-PDF, but we'll stick to jsPDF text.
-    
-    doc.setFontSize(18);
-    doc.text("Prikaz na komandirovku / Komandirovochnoe udostoverenie", 14, 20);
-    
-    doc.setFontSize(12);
-    doc.text(`Nomer: ${trip.id}`, 14, 30);
-    doc.text(`Sotrudnik: ${trip.employee?.name || ''}`, 14, 40);
-    doc.text(`Naznachenie: ${trip.destination}`, 14, 50);
-    doc.text(`Cel: ${trip.purpose}`, 14, 60);
-    doc.text(`Data: ${formatDate(trip.startDate)} - ${formatDate(trip.endDate)}`, 14, 70);
-    
-    doc.text("Rukovoditel: ___________________", 14, 100);
-    doc.text("Podotchetnoe lico: ___________________", 14, 120);
+  const tripPrintRef = useRef(null);
+  const [activeTripForPrint, setActiveTripForPrint] = useState<any>(null);
+  const handlePrintTrip = useReactToPrint({
+    contentRef: tripPrintRef,
+    documentTitle: 'Prikaz_O_Komandirovanii'
+  });
 
-    doc.save(`Komandirovka_${trip.id}.pdf`);
+  const purchasePrintRef = useRef(null);
+  const [activePurchaseForPrint, setActivePurchaseForPrint] = useState<any>(null);
+  const handlePrintPurchase = useReactToPrint({
+    contentRef: purchasePrintRef,
+    documentTitle: 'Zayavka_Na_Rashody'
+  });
+
+  const generateTripPDF = (trip: any) => {
+    setActiveTripForPrint(trip);
+    setTimeout(() => {
+      handlePrintTrip();
+    }, 100);
   };
 
   const generatePurchasePDF = (purchase: any) => {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text("Sluzhebnaya zapiska na podotchet / Avansoviy otchet", 14, 20);
-    
-    doc.setFontSize(12);
-    doc.text(`Nomer zayavki: ${purchase.id}`, 14, 30);
-    doc.text(`Sotrudnik: ${purchase.requester?.name || ''}`, 14, 40);
-    doc.text(`Naimenovanie: ${purchase.title}`, 14, 50);
-    doc.text(`Summa: ${purchase.amount} KZT`, 14, 60);
-    doc.text(`Proekt: ${purchase.project?.name || ''}`, 14, 70);
-
-    doc.text("Rukovoditel: ___________________", 14, 100);
-    doc.text("Buhgalter: ___________________", 14, 120);
-    
-    doc.save(`Avansoviy_Otchet_${purchase.id}.pdf`);
+    setActivePurchaseForPrint(purchase);
+    setTimeout(() => {
+      handlePrintPurchase();
+    }, 100);
   };
 
   const generateToolLogPDF = (tool: any) => {
@@ -192,4 +176,9 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
+
+
+
+
 
