@@ -98,6 +98,23 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     }
   };
 
+  const handleDirectStatusChange = async (toolId: number, newStatus: string) => {
+    if (!window.confirm(`Вы уверены, что хотите изменить статус на ${newStatus}?`)) return;
+    try {
+      await fetch('/api/tools', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+        body: JSON.stringify({
+          id: toolId,
+          status: newStatus
+        })
+      });
+      fetchTools();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
@@ -209,12 +226,21 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
                         {t.holder ? <span>👤 {t.holder.name}</span> : '-'}
                       </td>
                       {['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(currentUser?.role) && (
-                        <td style={{ padding: '10px' }}>
+                        <td style={{ padding: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                           {t.status === 'AVAILABLE' && (
-                            <button onClick={() => setIssueToolId(t.id)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Выдать</button>
+                            <>
+                              <button onClick={() => setIssueToolId(t.id)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Выдать</button>
+                              <button onClick={() => handleDirectStatusChange(t.id, 'REPAIR')} className="inline-btn" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>В ремонт</button>
+                              <button onClick={() => handleDirectStatusChange(t.id, 'WRITTEN_OFF')} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>Списать</button>
+                            </>
                           )}
                           {t.status === 'IN_USE' && activeLog && (
                             <button onClick={() => setReturnLogId(activeLog.id)} className="inline-btn" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>Оформить возврат</button>
+                          )}
+                          {(t.status === 'REPAIR' || t.status === 'WRITTEN_OFF') && (
+                            <>
+                              <button onClick={() => handleDirectStatusChange(t.id, 'AVAILABLE')} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>На склад (Доступен)</button>
+                            </>
                           )}
                         </td>
                       )}
