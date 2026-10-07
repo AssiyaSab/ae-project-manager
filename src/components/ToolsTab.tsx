@@ -26,7 +26,10 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
   const fetchTools = async () => {
     if (!pass) return;
     try {
-      const headers = { 'x-auth-password': pass };
+      const headers = { 
+        'x-auth-password': pass,
+        'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+      };
       const res = await fetch('/api/tools', { headers });
       const data = await res.json();
       if (Array.isArray(data)) setTools(data);

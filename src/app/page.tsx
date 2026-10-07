@@ -926,7 +926,7 @@ export default function Home() {
           
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
-              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
+              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
                 style={{
