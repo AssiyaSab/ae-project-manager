@@ -1,6 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
+import { formatDate } from '@/lib/formatters';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -36,7 +37,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
   // Экспорт реестра расходов в Excel (для 1С)
   const exportToExcel = () => {
     const data = purchases.map(p => ({
-      'Дата': new Date(p.createdAt).toLocaleDateString('ru-RU'),
+      'Дата': formatDate(p.createdAt),
       'Номер заявки': p.id,
       'ФИО сотрудника': p.requester?.name || 'Неизвестно',
       'Назначение платежа': p.title,
@@ -74,7 +75,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     doc.text(`Sotrudnik: ${trip.employee?.name || ''}`, 14, 40);
     doc.text(`Naznachenie: ${trip.destination}`, 14, 50);
     doc.text(`Cel: ${trip.purpose}`, 14, 60);
-    doc.text(`Data: ${new Date(trip.startDate).toLocaleDateString('ru-RU')} - ${new Date(trip.endDate).toLocaleDateString('ru-RU')}`, 14, 70);
+    doc.text(`Data: ${formatDate(trip.startDate)} - ${formatDate(trip.endDate)}`, 14, 70);
     
     doc.text("Rukovoditel: ___________________", 14, 100);
     doc.text("Podotchetnoe lico: ___________________", 14, 120);
@@ -112,7 +113,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     doc.text(`Kategoriya: ${tool.category}`, 14, 50);
     doc.text(`Vydan sotrudniku: ${log.employee?.name || ''}`, 14, 60);
     doc.text(`Proekt/Obekt: ${log.project?.name || '-'}`, 14, 70);
-    doc.text(`Data vydachi: ${new Date(log.issueDate).toLocaleDateString('ru-RU')}`, 14, 80);
+    doc.text(`Data vydachi: ${formatDate(log.issueDate)}`, 14, 80);
 
     doc.text("Vydal (Sklad): ___________________", 14, 110);
     doc.text("Prijal (Sotrudnik): ___________________", 14, 130);
@@ -146,7 +147,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
               {trips.filter(t => t.status === 'APPROVED' || t.status === 'COMPLETED').map(t => (
                 <div key={t.id} style={{ padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', minWidth: '250px' }}>
                   <div style={{ fontWeight: 'bold' }}>{t.employee?.name}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>{t.destination} ({new Date(t.startDate).toLocaleDateString()})</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>{t.destination} ({formatDate(t.startDate)})</div>
                   <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', width: '100%' }}>Скачать PDF</button>
                 </div>
               ))}
@@ -191,3 +192,4 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+

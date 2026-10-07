@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import PurchasesTab from '@/components/PurchasesTab';
 import ToolsTab from '@/components/ToolsTab';
 import AccountingTab from '@/components/AccountingTab';
+import { formatDate, formatDateTime } from '@/lib/formatters';
 
 interface User {
   id: number;
@@ -680,7 +681,7 @@ export default function Home() {
         totalSpent,
         p.budget ? remaining : '—',
         p.manager ? p.manager.name : 'Не назначен',
-        new Date(p.createdAt).toLocaleDateString('ru-RU')
+        formatDate(p.createdAt)
       ];
     });
     exportToCSV('projects_report.csv', headers, rows);
@@ -1768,7 +1769,7 @@ export default function Home() {
                         <span className="alert-project-name">Проект: {a.task.project.name}</span>
                         <p className="alert-text-content">{a.text}</p>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Создано: {new Date(a.createdAt).toLocaleString('ru-RU')}
+                          Создано: {formatDateTime(a.createdAt)}
                         </span>
                       </div>
                       {a.status === 'ACTIVE' && (
@@ -1802,7 +1803,7 @@ export default function Home() {
                     <tbody>
                       {auditLogs.map(log => (
                         <tr key={log.id}>
-                          <td>{new Date(log.createdAt).toLocaleString('ru-RU')}</td>
+                          <td>{formatDateTime(log.createdAt)}</td>
                           <td>{log.user ? `${log.user.name} (${log.user.role})` : 'Система / Мастер-Админ'}</td>
                           <td>
                             <span className="badge" style={{ background: '#3b82f6', color: '#fff' }}>
@@ -2228,3 +2229,4 @@ export default function Home() {
     </div>
   );
 }
+

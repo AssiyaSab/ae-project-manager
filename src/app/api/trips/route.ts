@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { formatDate } from '@/lib/formatters';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
         `*Сотрудник:* ${trip.employee?.name || 'Система'}\n` +
         `*Пункт назначения:* ${trip.destination}\n` +
         `*Цель:* ${trip.purpose}\n` +
-        `*Даты:* с ${new Date(trip.startDate).toLocaleDateString('ru-RU')} по ${new Date(trip.endDate).toLocaleDateString('ru-RU')}\n` +
+        `*Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)}\n` +
         `*Бюджет:* ${trip.budget.toLocaleString('ru-RU')} ₸\n\n` +
         `Зайдите в панель управления для согласования.`;
 
@@ -113,3 +114,4 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Failed to update trip status' }, { status: 500 });
   }
 }
+

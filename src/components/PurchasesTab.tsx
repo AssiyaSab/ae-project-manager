@@ -1,6 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
+import { formatDate } from '@/lib/formatters';
 
 export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -140,7 +141,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             <tbody>
               {purchases.map(p => (
                 <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ padding: '10px' }}>{new Date(p.createdAt).toLocaleDateString('ru-RU')}</td>
+                  <td style={{ padding: '10px' }}>{formatDate(p.createdAt)}</td>
                   <td style={{ padding: '10px', fontWeight: 600 }}>{p.title}</td>
                   <td style={{ padding: '10px', color: '#10b981' }}>{p.amount.toLocaleString()} ₸</td>
                   <td style={{ padding: '10px' }}>{p.project?.name}</td>
@@ -226,7 +227,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                 <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                   <td style={{ padding: '10px', fontWeight: 600 }}>{t.employee?.name}</td>
                   <td style={{ padding: '10px' }}>{t.destination} <br/><span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t.purpose}</span></td>
-                  <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>{new Date(t.startDate).toLocaleDateString('ru-RU')} - {new Date(t.endDate).toLocaleDateString('ru-RU')}</td>
+                  <td style={{ padding: '10px', whiteSpace: 'nowrap' }}>{formatDate(t.startDate)} - {formatDate(t.endDate)}</td>
                   <td style={{ padding: '10px' }}>{t.project?.name || '-'}</td>
                   <td style={{ padding: '10px', color: '#10b981' }}>{t.budget.toLocaleString()} ₸</td>
                   <td style={{ padding: '10px' }}>
@@ -263,3 +264,4 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
