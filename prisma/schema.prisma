@@ -14,7 +14,7 @@ model User {
   name             String
   phone            String?           @unique
   telegramId       String?           @unique
-  role             String            // "ADMIN" | "ENGINEER" | "ASSEMBLER"
+  role             String            // "ADMIN" | "MANAGER" | "ACCOUNTANT" | "ENGINEER" | "ASSEMBLER" | "WAREHOUSE"
   title            String?           // Job title / designation
   isActive         Boolean           @default(true) // Status of employee (active or archived)
   login            String?           @unique

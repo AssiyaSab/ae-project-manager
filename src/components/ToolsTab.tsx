@@ -151,7 +151,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
       
       {/* ADD TOOL */}
-      {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
+      {['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(currentUser?.role) && (
         <div className="card">
           <h2 className="card-title">🔧 Добавить новый инструмент на склад</h2>
           <form onSubmit={handleToolSubmit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -172,61 +172,124 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
         </div>
       )}
 
-      {/* TOOLS LIST */}
-      <div className="card">
-        <h2 className="card-title">📦 Учет инструмента</h2>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Наименование</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Категория</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Номер</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Ответственный</th>
-                {['ADMIN', 'MANAGER'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Управление</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {tools.map(t => {
-                const activeLog = t.status === 'IN_USE' ? t.logs[0] : null; // First log is most recent
-                return (
-                  <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
-                    <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{t.category}</td>
-                    <td style={{ padding: '10px' }}>{t.serialNumber || '-'}</td>
-                    <td style={{ padding: '10px' }}>
-                      <span style={{ 
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
-                        background: t.status === 'AVAILABLE' ? 'rgba(16, 185, 129, 0.2)' : t.status === 'IN_USE' ? 'rgba(59, 130, 246, 0.2)' : t.status === 'REPAIR' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                        color: t.status === 'AVAILABLE' ? '#10b981' : t.status === 'IN_USE' ? '#3b82f6' : t.status === 'REPAIR' ? '#f59e0b' : '#ef4444'
-                       }}>
-                        {t.status === 'AVAILABLE' ? 'НА СКЛАДЕ' : t.status === 'IN_USE' ? 'ВЫДАН' : t.status === 'REPAIR' ? 'В РЕМОНТЕ' : 'СПИСАН'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px' }}>
-                      {t.holder ? <span>👤 {t.holder.name}</span> : '-'}
-                    </td>
-                    {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
+      {/* TOOLS LIST FOR MANAGEMENT */}
+      {['ADMIN', 'MANAGER', 'WAREHOUSE', 'ACCOUNTANT'].includes(currentUser?.role) && (
+        <div className="card">
+          <h2 className="card-title">📦 Учет инструмента</h2>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Наименование</th>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Категория</th>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Номер</th>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
+                  <th style={{ padding: '10px', textAlign: 'left' }}>Ответственный</th>
+                  {['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Управление</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {tools.map(t => {
+                  const activeLog = t.status === 'IN_USE' ? t.logs[0] : null;
+                  return (
+                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
+                      <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{t.category}</td>
+                      <td style={{ padding: '10px' }}>{t.serialNumber || '-'}</td>
                       <td style={{ padding: '10px' }}>
-                        {t.status === 'AVAILABLE' && (
-                          <button onClick={() => setIssueToolId(t.id)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Выдать</button>
-                        )}
-                        {t.status === 'IN_USE' && activeLog && (
-                          <button onClick={() => setReturnLogId(activeLog.id)} className="inline-btn" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>Оформить возврат</button>
-                        )}
+                        <span style={{ 
+                          padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
+                          background: t.status === 'AVAILABLE' ? 'rgba(16, 185, 129, 0.2)' : t.status === 'IN_USE' ? 'rgba(59, 130, 246, 0.2)' : t.status === 'REPAIR' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: t.status === 'AVAILABLE' ? '#10b981' : t.status === 'IN_USE' ? '#3b82f6' : t.status === 'REPAIR' ? '#f59e0b' : '#ef4444'
+                         }}>
+                          {t.status === 'AVAILABLE' ? 'НА СКЛАДЕ' : t.status === 'IN_USE' ? 'ВЫДАН' : t.status === 'REPAIR' ? 'В РЕМОНТЕ' : 'СПИСАН'}
+                        </span>
                       </td>
-                    )}
-                  </tr>
-                )
-              })}
-              {tools.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>База инструментов пуста.</td></tr>
-              )}
-            </tbody>
-          </table>
+                      <td style={{ padding: '10px' }}>
+                        {t.holder ? <span>👤 {t.holder.name}</span> : '-'}
+                      </td>
+                      {['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(currentUser?.role) && (
+                        <td style={{ padding: '10px' }}>
+                          {t.status === 'AVAILABLE' && (
+                            <button onClick={() => setIssueToolId(t.id)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Выдать</button>
+                          )}
+                          {t.status === 'IN_USE' && activeLog && (
+                            <button onClick={() => setReturnLogId(activeLog.id)} className="inline-btn" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>Оформить возврат</button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+                {tools.length === 0 && (
+                  <tr><td colSpan={6} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>База инструментов пуста.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* TOOLS FOR ENGINEERS/ASSEMBLERS */}
+      {['ENGINEER', 'ASSEMBLER'].includes(currentUser?.role) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          <div className="card" style={{ borderColor: 'rgba(59, 130, 246, 0.5)' }}>
+            <h2 className="card-title">🎒 Мой инструмент (на руках)</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Наименование</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Номер</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tools.filter(t => t.holder?.id === currentUser.id).map(t => (
+                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
+                      <td style={{ padding: '10px' }}>{t.serialNumber || '-'}</td>
+                    </tr>
+                  ))}
+                  {tools.filter(t => t.holder?.id === currentUser.id).length === 0 && (
+                    <tr><td colSpan={2} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>Нет выданного инструмента</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 className="card-title">✅ Свободно на складе</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Наименование</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Категория</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Действие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tools.filter(t => t.status === 'AVAILABLE').map(t => (
+                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
+                      <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{t.category}</td>
+                      <td style={{ padding: '10px' }}>
+                        <button onClick={() => alert('Функция запроса пока находится в разработке. Обратитесь к кладовщику для выдачи: ' + t.name)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Запросить выдачу</button>
+                      </td>
+                    </tr>
+                  ))}
+                  {tools.filter(t => t.status === 'AVAILABLE').length === 0 && (
+                    <tr><td colSpan={3} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>На складе нет свободного инструмента</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
 
       {/* ISSUE MODAL */}
       {issueToolId && (

@@ -13,6 +13,7 @@ interface User {
   role: string;
   title: string | null;
   isActive: boolean;
+  login: string | null;
 }
 
 interface Alert {
@@ -263,8 +264,12 @@ export default function Home() {
       localStorage.setItem('ae_current_user', JSON.stringify(data));
       localStorage.setItem('ae_admin_password', loginPassword);
       
-      if (data.role === 'ADMIN' || data.role === 'ACCOUNTANT' || data.role === 'MANAGER') {
+      if (data.role === 'ADMIN' || data.role === 'MANAGER') {
         setActiveTab('dashboard');
+      } else if (data.role === 'ACCOUNTANT') {
+        setActiveTab('accounting');
+      } else if (data.role === 'WAREHOUSE') {
+        setActiveTab('tools');
       } else {
         setActiveTab('my-tasks');
       }
@@ -1619,6 +1624,7 @@ export default function Home() {
                       <option value="ADMIN">ГИП / Администратор</option>
                       <option value="MANAGER">Руководитель</option>
                       <option value="ACCOUNTANT">Бухгалтер</option>
+                      <option value="WAREHOUSE">Кладовщик</option>
                       <option value="ENGINEER">Инженер</option>
                       <option value="ASSEMBLER">Сборщик</option>
                     </select>
@@ -2080,6 +2086,7 @@ export default function Home() {
                   <option value="ADMIN">ГИП / Администратор</option>
                   <option value="MANAGER">Руководитель</option>
                   <option value="ACCOUNTANT">Бухгалтер</option>
+                  <option value="WAREHOUSE">Кладовщик</option>
                   <option value="ENGINEER">Инженер</option>
                   <option value="ASSEMBLER">Сборщик</option>
                 </select>

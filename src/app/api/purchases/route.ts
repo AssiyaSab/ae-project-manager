@@ -6,11 +6,15 @@ export const dynamic = 'force-dynamic';
 import { validateAuth, validateApprover, createAuditLog } from '@/lib/auth';
 
 export async function GET(request: Request) {
-  if (!(await validateAuth(request))) {
+  const user = await validateAuth(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
+    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(user.role);
+    
     const purchases = await prisma.purchaseRequest.findMany({
+      where: isManagement ? undefined : { requesterId: user.id },
       include: {
         project: true,
         requester: true,
@@ -25,13 +29,19 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await validateAuth(request))) {
+  const user = await validateAuth(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const body = await request.json();
-    const { title, amount, projectId, fileUrl, requesterId } = body;
+    let { title, amount, projectId, fileUrl, requesterId } = body;
     
+    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(user.role);
+    if (!isManagement) {
+      requesterId = user.id;
+    }
+
     if (!title || !amount || !projectId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }

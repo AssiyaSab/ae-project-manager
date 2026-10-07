@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-import { validateAuth, validateAdmin, createAuditLog } from '@/lib/auth';
+import { validateAuth, validateAdmin, validateWarehouse, createAuditLog } from '@/lib/auth';
 
 export async function GET(request: Request) {
   if (!(await validateAuth(request))) {
@@ -29,7 +29,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!(await validateAdmin(request))) {
+  const user = await validateWarehouse(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -49,7 +50,6 @@ export async function POST(request: Request) {
       },
     });
 
-    const user = await validateAuth(request); 
     await createAuditLog(user?.id || null, 'CREATE_TOOL', `Добавлен инструмент: ${tool.name}`); 
     return NextResponse.json(tool);
   } catch (error) {
@@ -59,7 +59,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!(await validateAdmin(request))) {
+  const user = await validateWarehouse(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -79,5 +80,28 @@ export async function PATCH(request: Request) {
   } catch (error) {
     console.error('PATCH /api/tools error:', error);
     return NextResponse.json({ error: 'Failed to update tool' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  const user = await validateWarehouse(request);
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    await prisma.tool.delete({
+      where: { id: Number(id) },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/tools error:', error);
+    return NextResponse.json({ error: 'Failed to delete tool' }, { status: 500 });
   }
 }
