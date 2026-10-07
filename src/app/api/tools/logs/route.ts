@@ -3,11 +3,12 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-import { validateAuth, validateAdmin } from '@/lib/auth';
+import { validateAuth, validateWarehouse } from '@/lib/auth';
 
 // Issue a tool
 export async function POST(request: Request) {
-  if (!(await validateAdmin(request))) {
+  const user = await validateWarehouse(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -46,7 +47,8 @@ export async function POST(request: Request) {
 
 // Return a tool
 export async function PATCH(request: Request) {
-  if (!(await validateAdmin(request))) {
+  const user = await validateWarehouse(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

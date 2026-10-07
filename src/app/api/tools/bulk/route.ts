@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { validateAuth, validateAdmin, createAuditLog } from '@/lib/auth';
+import { validateAuth, validateWarehouse, createAuditLog } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  if (!(await validateAdmin(request))) {
+  const user = await validateWarehouse(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
@@ -29,7 +30,6 @@ export async function POST(request: Request) {
       )
     );
 
-    const user = await validateAuth(request);
     await createAuditLog(user?.id || null, 'IMPORT_TOOLS', `Массовый импорт инструментов (${createdTools.length} шт.) из Excel/CSV`);
 
     return NextResponse.json({ success: true, count: createdTools.length });
