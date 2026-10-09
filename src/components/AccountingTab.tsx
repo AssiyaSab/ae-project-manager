@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '@/lib/formatters';
@@ -54,7 +54,18 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Реестр расходов");
-      XLSX.writeFile(wb, "Reestr_Rashodov_1C.xlsx");
+      
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Reestr_Rashodov_1C.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
       alert("Реестр расходов успешно выгружен в Excel!");
     } catch (e) {
       console.error(e);
@@ -175,13 +186,19 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
               ))}
               {tools.filter(t => t.status === 'IN_USE').length === 0 && <div style={{ color: 'var(--text-muted)' }}>Нет выданных инструментов</div>}
             </div>
-          </div>
-
-        </div>
+          </div>        </div>
+      </div>
+      
+      {/* Invisible Print Components */}
+      <div style={{ display: 'none' }}>
+        <PrintTripOrder ref={tripPrintRef} trip={activeTripForPrint} />
+        <PrintPurchaseRequest ref={purchasePrintRef} purchase={activePurchaseForPrint} />
       </div>
     </div>
   );
 }
+
+
 
 
 
