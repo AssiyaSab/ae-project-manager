@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ru } from 'date-fns/locale';
 import { formatDate } from '@/lib/formatters';
+import { useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
+import PrintPurchaseRequest from './PrintPurchaseRequest';
 
 export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchases, setPurchases] = useState<any[]>([]);
@@ -13,6 +16,20 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchaseFileUrl, setPurchaseFileUrl] = useState('');
 
   const [editingPurchase, setEditingPurchase] = useState<any>(null);
+
+  const purchasePrintRef = useRef(null);
+  const [activePurchaseForPrint, setActivePurchaseForPrint] = useState<any>(null);
+  const handlePrintPurchase = useReactToPrint({
+    contentRef: purchasePrintRef,
+    documentTitle: 'Zayavka_Na_Rashody'
+  });
+
+  const generatePurchasePDF = (purchase: any) => {
+    setActivePurchaseForPrint(purchase);
+    setTimeout(() => {
+      handlePrintPurchase();
+    }, 100);
+  };
 
   const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') : '';
 
@@ -209,6 +226,10 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         </div>
       )}
 
+      <div style={{ display: 'none' }}>
+        <PrintPurchaseRequest ref={purchasePrintRef} purchase={activePurchaseForPrint} />
+      </div>
     </div>
   );
 }
+

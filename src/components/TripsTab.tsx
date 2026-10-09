@@ -3,6 +3,9 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ru } from 'date-fns/locale';
 import { formatDate } from '@/lib/formatters';
+import { useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
+import PrintTripOrder from './PrintTripOrder';
 
 export default function TripsTab({ currentUser, projects, users }: any) {
   const [trips, setTrips] = useState<any[]>([]);
@@ -16,6 +19,20 @@ export default function TripsTab({ currentUser, projects, users }: any) {
   const [tripProject, setTripProject] = useState('');
 
   const [editingTrip, setEditingTrip] = useState<any>(null);
+
+  const tripPrintRef = useRef(null);
+  const [activeTripForPrint, setActiveTripForPrint] = useState<any>(null);
+  const handlePrintTrip = useReactToPrint({
+    contentRef: tripPrintRef,
+    documentTitle: 'Prikaz_O_Komandirovanii'
+  });
+
+  const generateTripPDF = (trip: any) => {
+    setActiveTripForPrint(trip);
+    setTimeout(() => {
+      handlePrintTrip();
+    }, 100);
+  };
 
   const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') : '';
 
@@ -150,7 +167,8 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                 <th style={{ padding: '10px', textAlign: 'left' }}>Сроки</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Проект</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Бюджет</th>
-                <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
+                                <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
+                <th style={{ padding: '10px', textAlign: 'left' }}>Документ</th>
                 {['ADMIN', 'MANAGER'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
               </tr>
             </thead>
@@ -170,6 +188,11 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                      }}>
                       {t.status === 'PENDING' ? 'НА РАССМОТРЕНИИ' : t.status === 'APPROVED' ? 'ОДОБРЕНО' : t.status === 'COMPLETED' ? 'ЗАВЕРШЕНО' : 'ОТКЛОНЕНО'}
                     </span>
+                                    </td>
+                  <td style={{ padding: '10px' }}>
+                    {(t.status === 'APPROVED' || t.status === 'COMPLETED') ? (
+                      <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.8rem' }}>📄 PDF</button>
+                    ) : '-'}
                   </td>
                   {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px' }}>
@@ -232,6 +255,14 @@ export default function TripsTab({ currentUser, projects, users }: any) {
         </div>
       )}
 
+      <div style={{ display: 'none' }}>
+        <PrintTripOrder ref={tripPrintRef} trip={activeTripForPrint} />
+      </div>
     </div>
   );
 }
+
+
+
+
+

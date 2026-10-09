@@ -23,13 +23,13 @@ const PrintTripOrder = forwardRef<HTMLDivElement, PrintTripOrderProps>(({ trip }
         <div style={{ width: '45%' }}>
           <div>ТОО</div>
           <div>"АзияЭнергоАвтоматика"</div>
-          <div>"___"___________</div>
+          <div>{formattedDate}</div>
           <div style={{ marginTop: '20px', textTransform: 'uppercase' }}>БҰЙРЫҚ</div>
         </div>
         <div style={{ width: '45%' }}>
           <div>ТОО</div>
           <div>"АзияЭнергоАвтоматика"</div>
-          <div>"___"___________</div>
+          <div>{formattedDate}</div>
           <div style={{ marginTop: '20px', textTransform: 'uppercase' }}>ПРИКАЗ</div>
         </div>
       </div>
