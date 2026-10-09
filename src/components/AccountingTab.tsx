@@ -98,6 +98,20 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
       console.error(e);
     }
   };
+
+  const handleCancelToolAct = async (id: number) => {
+    if (!window.confirm('Вы уверены, что хотите удалить этот акт? Инструмент будет возвращен на склад.')) return;
+    try {
+      await fetch('/api/tools', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+        body: JSON.stringify({ id, status: 'AVAILABLE' })
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
   // Генерация PDF: Командировочное удостоверение
   const tripPrintRef = useRef(null);
   const [activeTripForPrint, setActiveTripForPrint] = useState<any>(null);
@@ -212,7 +226,10 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
                 <div key={t.id} style={{ padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', minWidth: '250px' }}>
                   <div style={{ fontWeight: 'bold' }}>{t.name}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>На руках: {t.holder?.name}</div>
-                  <button onClick={() => generateToolLogPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', width: '100%' }}>Скачать PDF</button>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <button onClick={() => generateToolLogPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', flex: 1 }}>Скачать PDF</button>
+                    <button onClick={() => handleCancelToolAct(t.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>🗑️</button>
+                  </div>
                 </div>
               ))}
               {tools.filter(t => t.status === 'IN_USE').length === 0 && <div style={{ color: 'var(--text-muted)' }}>Нет выданных инструментов</div>}
@@ -228,6 +245,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
 
 
 
