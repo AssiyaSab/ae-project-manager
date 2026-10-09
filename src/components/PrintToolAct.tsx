@@ -77,3 +77,4 @@ const PrintToolAct = forwardRef<HTMLDivElement, PrintToolActProps>(({ log, tool 
 
 PrintToolAct.displayName = 'PrintToolAct';
 export default PrintToolAct;
+

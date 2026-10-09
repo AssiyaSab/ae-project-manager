@@ -81,7 +81,7 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
         <div style={{ display: 'flex', alignItems: 'center' }}>
           Согласовано: __________________ / __________________ /
           {(purchase.status === 'APPROVED' || purchase.status === 'PAID') && (
-            <img src="/images/stamp_signature.png" alt="Stamp" style={{ width: '120px', height: '120px', position: 'absolute', left: '150px', top: '-40px', opacity: 0.9 }} />
+            <img src="/images/signature.png" alt="Signature" style={{ width: '120px', height: '60px', position: 'absolute', left: '150px', top: '-10px', opacity: 0.9 }} />
           )}
         </div>
         <div>

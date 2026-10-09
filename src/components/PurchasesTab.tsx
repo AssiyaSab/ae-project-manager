@@ -175,6 +175,9 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                   </td>
                   <td style={{ padding: '10px' }}>
                     {p.fileUrl ? <a href={p.fileUrl} target="_blank" rel="noreferrer" style={{ color: '#3b82f6', textDecoration: 'underline' }}>Скан</a> : '-'}
+                                    </td>
+                  <td style={{ padding: '10px' }}>
+                    <button onClick={() => generatePurchasePDF(p)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.8rem' }}>📄 PDF</button>
                   </td>
                   {['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
@@ -232,4 +235,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
+
+
 

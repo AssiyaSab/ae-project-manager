@@ -62,9 +62,11 @@ const PrintTripOrder = forwardRef<HTMLDivElement, PrintTripOrderProps>(({ trip }
       <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
         <div style={{ fontWeight: 'bold' }}>Директор</div>
         
-        <div style={{ position: 'absolute', left: '20%', top: '-30px', opacity: 0.85 }}>
-          <img src="/stamp.png" alt="Stamp" style={{ width: '150px', height: '150px' }} />
-        </div>
+        {(trip.status === 'APPROVED' || trip.status === 'COMPLETED') && (
+          <div style={{ position: 'absolute', left: '30%', top: '-10px', opacity: 0.85 }}>
+            <img src="/images/signature.png" alt="Signature" style={{ width: '120px', height: '60px' }} />
+          </div>
+        )}
 
         <div style={{ fontWeight: 'bold' }}>К.Ж. Быкаев</div>
       </div>

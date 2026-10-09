@@ -190,9 +190,9 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                     </span>
                                     </td>
                   <td style={{ padding: '10px' }}>
-                    {(t.status === 'APPROVED' || t.status === 'COMPLETED') ? (
+                    
                       <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.8rem' }}>📄 PDF</button>
-                    ) : '-'}
+                    
                   </td>
                   {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px' }}>
@@ -261,6 +261,9 @@ export default function TripsTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
+
+
 
 
 
