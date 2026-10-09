@@ -1,7 +1,8 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
 import PurchasesTab from '@/components/PurchasesTab';
+import TripsTab from '@/components/TripsTab';
 import ToolsTab from '@/components/ToolsTab';
 import AccountingTab from '@/components/AccountingTab';
 import { formatDate, formatDateTime } from '@/lib/formatters';
@@ -62,7 +63,7 @@ interface ChatMessage {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'tools' | 'accounting' | 'my-tasks'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks'>('dashboard');
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -894,7 +895,13 @@ export default function Home() {
               className={`nav-btn ${activeTab === 'purchases' ? 'active' : ''}`}
               onClick={() => setActiveTab('purchases')}
             >
-              🛒 Закупки
+              🛒 Закупки ТМЦ
+            </button>
+            <button 
+              className={`nav-btn ${activeTab === 'trips' ? 'active' : ''}`}
+              onClick={() => setActiveTab('trips')}
+            >
+              ✈️ Командировки
             </button>
             <button 
               className={`nav-btn ${activeTab === 'tools' ? 'active' : ''}`}
@@ -1860,8 +1867,12 @@ export default function Home() {
             </section>
           )}
 
-          {activeTab === 'purchases' && (
+                    {activeTab === 'purchases' && (
             <PurchasesTab currentUser={currentUser} projects={projects} users={users} />
+          )}
+
+          {activeTab === 'trips' && (
+            <TripsTab currentUser={currentUser} projects={projects} users={users} />
           )}
 
           {activeTab === 'tools' && (
@@ -2229,4 +2240,7 @@ export default function Home() {
     </div>
   );
 }
+
+
+
 

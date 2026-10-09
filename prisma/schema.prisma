@@ -103,7 +103,8 @@ model Tool {
   name         String
   serialNumber String?
   category     String    // "Электроинструмент", "Измерительные приборы", "Ручной инструмент"
-  status       String    @default("AVAILABLE") // "AVAILABLE" | "IN_USE" | "REPAIR" | "WRITTEN_OFF"
+  status       String    @default("AVAILABLE") // "AVAILABLE" | "PENDING_ACCEPTANCE" | "IN_USE" | "REPAIR" | "WRITTEN_OFF"
+  isArchived   Boolean   @default(false)
   holderId     Int?
   holder       User?     @relation(fields: [holderId], references: [id], onDelete: SetNull)
   createdAt    DateTime  @default(now())
@@ -135,3 +136,4 @@ model AuditLog {
   details   String?
   createdAt DateTime @default(now())
 }
+

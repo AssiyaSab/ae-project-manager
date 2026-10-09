@@ -77,10 +77,18 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
         </tbody>
       </table>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '50px' }}>
-        <div>Согласовано: __________________ / __________________ /</div>
-        <div>Выдано: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; __________________ / __________________ /</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '40px', marginTop: '50px', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          Согласовано: __________________ / __________________ /
+          {(purchase.status === 'APPROVED' || purchase.status === 'PAID') && (
+            <img src="/images/stamp_signature.png" alt="Stamp" style={{ width: '120px', height: '120px', position: 'absolute', left: '150px', top: '-40px', opacity: 0.9 }} />
+          )}
+        </div>
+        <div>
+          Выдано: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; __________________ / __________________ /
+        </div>
       </div>
+
     </div>
   );
 });

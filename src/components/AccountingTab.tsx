@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '@/lib/formatters';
@@ -40,20 +40,26 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
 
   // Экспорт реестра расходов в Excel (для 1С)
   const exportToExcel = () => {
-    const data = purchases.map(p => ({
-      'Дата': formatDate(p.createdAt),
-      'Номер заявки': p.id,
-      'ФИО сотрудника': p.requester?.name || 'Неизвестно',
-      'Назначение платежа': p.title,
-      'Сумма (KZT)': p.amount,
-      'Проект': p.project?.name || '-',
-      'Статус': p.status
-    }));
+    try {
+      const data = purchases.map(p => ({
+        'Дата': formatDate(p.createdAt),
+        'ID заявки': p.id,
+        'ФИО сотрудника': p.requester?.name || 'Неизвестно',
+        'Назначение платежа': p.title,
+        'Сумма (KZT)': p.amount,
+        'Проект': p.project?.name || '-',
+        'Статус': p.status
+      }));
 
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Реестр Расходов");
-    XLSX.writeFile(wb, "Reestr_Rashodov_1C.xlsx");
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Реестр расходов");
+      XLSX.writeFile(wb, "Reestr_Rashodov_1C.xlsx");
+      alert("Реестр расходов успешно выгружен в Excel!");
+    } catch (e) {
+      console.error(e);
+      alert("Произошла ошибка при выгрузке в Excel. Проверьте, установлена ли библиотека xlsx.");
+    }
   };
 
   // Генерация PDF: Командировочное удостоверение
@@ -176,6 +182,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
 
 
 

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     await prisma.tool.update({
       where: { id: Number(toolId) },
       data: {
-        status: 'IN_USE',
+        status: 'PENDING_ACCEPTANCE',
         holderId: Number(employeeId)
       }
     });
@@ -83,3 +83,4 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Failed to return tool' }, { status: 500 });
   }
 }
+

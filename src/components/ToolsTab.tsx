@@ -1,9 +1,9 @@
-﻿'use client';
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ru } from 'date-fns/locale';
+import { useReactToPrint } from 'react-to-print';
+import PrintToolAct from './PrintToolAct';
 
 export default function ToolsTab({ currentUser, projects, users }: any) {
   const [tools, setTools] = useState<any[]>([]);
@@ -12,6 +12,9 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
   const [toolName, setToolName] = useState('');
   const [toolSerial, setToolSerial] = useState('');
   const [toolCategory, setToolCategory] = useState('Электроинструмент');
+
+  // Edit Form
+  const [editingTool, setEditingTool] = useState<any>(null);
 
   // Issue Form
   const [issueToolId, setIssueToolId] = useState<number | null>(null);
@@ -22,7 +25,16 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
   // Return Form
   const [returnLogId, setReturnLogId] = useState<number | null>(null);
   const [returnCondition, setReturnCondition] = useState('');
-  const [returnStatus, setReturnStatus] = useState('AVAILABLE'); // AVAILABLE, REPAIR, WRITTEN_OFF
+  const [returnStatus, setReturnStatus] = useState('AVAILABLE');
+
+  // Print Form
+  const printActRef = useRef(null);
+  const [activeLogForPrint, setActiveLogForPrint] = useState<any>(null);
+  const [activeToolForPrint, setActiveToolForPrint] = useState<any>(null);
+  const handlePrintAct = useReactToPrint({
+    contentRef: printActRef,
+    documentTitle: 'Akt_Priema_Peredachi'
+  });
 
   const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') : '';
 
@@ -54,6 +66,35 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
         body: JSON.stringify({ name: toolName, serialNumber: toolSerial, category: toolCategory })
       });
       setToolName(''); setToolSerial('');
+      fetchTools();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTool) return;
+    try {
+      await fetch('/api/tools', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+        body: JSON.stringify({ id: editingTool.id, name: editingTool.name, serialNumber: editingTool.serialNumber, category: editingTool.category })
+      });
+      setEditingTool(null);
+      fetchTools();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteTool = async (id: number) => {
+    if (!window.confirm('Вы уверены, что хотите удалить инструмент?')) return;
+    try {
+      await fetch(`/api/tools?id=${id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' }
+      });
       fetchTools();
     } catch (e) {
       console.error(e);
@@ -110,9 +151,40 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
       await fetch('/api/tools', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+        body: JSON.stringify({ id: toolId, status: newStatus })
+      });
+      fetchTools();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAcceptTool = async (toolId: number) => {
+    if (!window.confirm('Вы подтверждаете прием инструмента?')) return;
+    try {
+      await fetch('/api/tools', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+        body: JSON.stringify({ id: toolId, status: 'IN_USE' })
+      });
+      fetchTools();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleRejectTool = async (toolId: number, logId: number) => {
+    const reason = window.prompt('Укажите причину отказа:');
+    if (reason === null) return;
+    try {
+      await fetch('/api/tools/logs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
         body: JSON.stringify({
-          id: toolId,
-          status: newStatus
+          logId: logId,
+          toolId: toolId,
+          condition: 'Отклонено: ' + reason,
+          newStatus: 'AVAILABLE'
         })
       });
       fetchTools();
@@ -121,13 +193,18 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
     }
   };
 
+  const printAct = (tool: any, log: any) => {
+    setActiveToolForPrint(tool);
+    setActiveLogForPrint(log);
+    setTimeout(() => {
+      handlePrintAct();
+    }, 100);
+  };
+
   const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
-    
-    // Dynamic import for xlsx to keep bundle light if possible, but static import is fine for React
     const XLSX = await import('xlsx');
-    
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
@@ -136,13 +213,11 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 }) as string[][];
-        
-        // Skip header row
         const parsedTools = data.slice(1).map(row => ({
           name: row[0],
-          category: row[1] || 'Общее',
+          category: row[1] || 'Расходники',
           serialNumber: row[2] ? String(row[2]) : undefined,
-        })).filter(t => t.name); // only if name exists
+        })).filter(t => t.name);
         
         if (parsedTools.length === 0) {
           alert("Не найдено валидных данных. Убедитесь, что колонки: Наименование, Категория, Серийный номер.");
@@ -167,13 +242,12 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
       }
     };
     reader.readAsBinaryString(file);
-    e.target.value = ''; // reset
+    e.target.value = ''; 
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
       
-      {/* ADD TOOL */}
       {['ADMIN', 'MANAGER', 'WAREHOUSE'].includes(currentUser?.role) && (
         <div className="card">
           <h2 className="card-title">🔧 Добавить новый инструмент на склад</h2>
@@ -195,7 +269,6 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
         </div>
       )}
 
-      {/* TOOLS LIST FOR MANAGEMENT */}
       {['ADMIN', 'MANAGER', 'WAREHOUSE', 'ACCOUNTANT'].includes(currentUser?.role) && (
         <div className="card">
           <h2 className="card-title">📦 Учет инструмента</h2>
@@ -213,7 +286,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
               </thead>
               <tbody>
                 {tools.map(t => {
-                  const activeLog = t.status === 'IN_USE' ? t.logs[0] : null;
+                  const activeLog = (t.status === 'IN_USE' || t.status === 'PENDING_ACCEPTANCE') ? t.logs[0] : null;
                   return (
                     <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                       <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
@@ -222,10 +295,10 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
                       <td style={{ padding: '10px' }}>
                         <span style={{ 
                           padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
-                          background: t.status === 'AVAILABLE' ? 'rgba(16, 185, 129, 0.2)' : t.status === 'IN_USE' ? 'rgba(59, 130, 246, 0.2)' : t.status === 'REPAIR' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                          color: t.status === 'AVAILABLE' ? '#10b981' : t.status === 'IN_USE' ? '#3b82f6' : t.status === 'REPAIR' ? '#f59e0b' : '#ef4444'
+                          background: t.status === 'AVAILABLE' ? 'rgba(16, 185, 129, 0.2)' : t.status === 'PENDING_ACCEPTANCE' ? 'rgba(245, 158, 11, 0.2)' : t.status === 'IN_USE' ? 'rgba(59, 130, 246, 0.2)' : t.status === 'REPAIR' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                          color: t.status === 'AVAILABLE' ? '#10b981' : t.status === 'PENDING_ACCEPTANCE' ? '#f59e0b' : t.status === 'IN_USE' ? '#3b82f6' : t.status === 'REPAIR' ? '#f59e0b' : '#ef4444'
                          }}>
-                          {t.status === 'AVAILABLE' ? 'НА СКЛАДЕ' : t.status === 'IN_USE' ? 'ВЫДАН' : t.status === 'REPAIR' ? 'В РЕМОНТЕ' : 'СПИСАН'}
+                          {t.status === 'AVAILABLE' ? 'НА СКЛАДЕ' : t.status === 'PENDING_ACCEPTANCE' ? 'ОЖИДАЕТ' : t.status === 'IN_USE' ? 'ВЫДАН' : t.status === 'REPAIR' ? 'В РЕМОНТЕ' : 'СПИСАН'}
                         </span>
                       </td>
                       <td style={{ padding: '10px' }}>
@@ -241,12 +314,19 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
                             </>
                           )}
                           {t.status === 'IN_USE' && activeLog && (
-                            <button onClick={() => setReturnLogId(activeLog.id)} className="inline-btn" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>Оформить возврат</button>
+                            <button onClick={() => setReturnLogId(activeLog.id)} className="inline-btn" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>Возврат</button>
                           )}
                           {(t.status === 'REPAIR' || t.status === 'WRITTEN_OFF') && (
+                            <button onClick={() => handleDirectStatusChange(t.id, 'AVAILABLE')} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>На склад</button>
+                          )}
+                          {currentUser?.role === 'ADMIN' && (
                             <>
-                              <button onClick={() => handleDirectStatusChange(t.id, 'AVAILABLE')} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>На склад (Доступен)</button>
+                              <button onClick={() => setEditingTool(t)} className="inline-btn" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>✏️</button>
+                              <button onClick={() => handleDeleteTool(t.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>🗑️</button>
                             </>
+                          )}
+                          {(t.status === 'IN_USE' || t.status === 'PENDING_ACCEPTANCE') && activeLog && (
+                            <button onClick={() => printAct(t, activeLog)} className="inline-btn" style={{ background: 'rgba(255, 255, 255, 0.1)', color: '#fff' }}>🖨️ Акт</button>
                           )}
                         </td>
                       )}
@@ -262,68 +342,72 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
         </div>
       )}
 
-      {/* TOOLS FOR ENGINEERS/ASSEMBLERS */}
       {['ENGINEER', 'ASSEMBLER'].includes(currentUser?.role) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           <div className="card" style={{ borderColor: 'rgba(59, 130, 246, 0.5)' }}>
-            <h2 className="card-title">🎒 Мой инструмент (на руках)</h2>
+            <h2 className="card-title">🎒 Мой инструмент</h2>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Наименование</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Номер</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tools.filter(t => t.holder?.id === currentUser.id).map(t => (
-                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
-                      <td style={{ padding: '10px' }}>{t.serialNumber || '-'}</td>
-                    </tr>
-                  ))}
-                  {tools.filter(t => t.holder?.id === currentUser.id).length === 0 && (
-                    <tr><td colSpan={2} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>Нет выданного инструмента</td></tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2 className="card-title">✅ Свободно на складе</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Наименование</th>
-                    <th style={{ padding: '10px', textAlign: 'left' }}>Категория</th>
+                    <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
                     <th style={{ padding: '10px', textAlign: 'left' }}>Действие</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {tools.filter(t => t.status === 'AVAILABLE').map(t => (
-                    <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
-                      <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{t.category}</td>
-                      <td style={{ padding: '10px' }}>
-                        <button onClick={() => alert('Функция запроса пока находится в разработке. Обратитесь к кладовщику для выдачи: ' + t.name)} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>Запросить выдачу</button>
-                      </td>
-                    </tr>
-                  ))}
-                  {tools.filter(t => t.status === 'AVAILABLE').length === 0 && (
-                    <tr><td colSpan={3} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>На складе нет свободного инструмента</td></tr>
-                  )}
+                  {tools.filter(t => t.holder?.id === currentUser.id).map(t => {
+                    const activeLog = t.logs[0];
+                    return (
+                      <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '10px', fontWeight: 600 }}>{t.name}</td>
+                        <td style={{ padding: '10px' }}>{t.serialNumber || '-'}</td>
+                        <td style={{ padding: '10px' }}>
+                          {t.status === 'PENDING_ACCEPTANCE' ? <span style={{ color: '#f59e0b' }}>ОЖИДАЕТ ПРИЕМА</span> : <span style={{ color: '#3b82f6' }}>ВЫДАН</span>}
+                        </td>
+                        <td style={{ padding: '10px', display: 'flex', gap: '5px' }}>
+                          {t.status === 'PENDING_ACCEPTANCE' && (
+                            <>
+                              <button onClick={() => handleAcceptTool(t.id)} className="inline-btn" style={{ background: '#10b981', color: '#fff' }}>Принять</button>
+                              <button onClick={() => handleRejectTool(t.id, activeLog?.id)} className="inline-btn" style={{ background: '#ef4444', color: '#fff' }}>Отклонить</button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
-
         </div>
       )}
 
-      {/* ISSUE MODAL */}
+      {/* MODALS */}
+      {editingTool && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="form-card" style={{ width: '400px', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Редактировать инструмент</h3>
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <input className="form-input" value={editingTool.name} onChange={e => setEditingTool({...editingTool, name: e.target.value})} required />
+              <input className="form-input" value={editingTool.serialNumber || ''} onChange={e => setEditingTool({...editingTool, serialNumber: e.target.value})} />
+              <select className="form-select" value={editingTool.category} onChange={e => setEditingTool({...editingTool, category: e.target.value})} required>
+                <option value="Электроинструмент">Электроинструмент</option>
+                <option value="Измерительные приборы">Измерительные приборы</option>
+                <option value="Ручной инструмент">Ручной инструмент</option>
+                <option value="Расходники">Расходники</option>
+              </select>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" className="inline-btn" onClick={() => setEditingTool(null)}>Отмена</button>
+                <button type="submit" className="btn-submit">Сохранить</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {issueToolId && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="form-card" style={{ width: '400px', background: '#151b26' }}>
@@ -349,31 +433,24 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="button" className="inline-btn" onClick={() => setIssueToolId(null)}>Отмена</button>
-                <button type="submit" className="btn-submit">Выдать</button>
+                <button type="submit" className="btn-submit">Оформить</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* RETURN MODAL */}
       {returnLogId && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
           <div className="form-card" style={{ width: '400px', background: '#151b26' }}>
             <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Возврат инструмента</h3>
             <form onSubmit={handleReturnSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div>
-                <label className="form-label">Состояние инструмента</label>
-                <input type="text" className="form-input" placeholder="Напр: Исправен, царапины..." value={returnCondition} onChange={e => setReturnCondition(e.target.value)} />
-              </div>
-              <div>
-                <label className="form-label">Новый статус</label>
-                <select className="form-select" value={returnStatus} onChange={e => setReturnStatus(e.target.value)}>
-                  <option value="AVAILABLE">Вернуть на склад (Свободен)</option>
-                  <option value="REPAIR">Отправить в ремонт</option>
-                  <option value="WRITTEN_OFF">Списать (Сломан окончательно)</option>
-                </select>
-              </div>
+              <input type="text" className="form-input" placeholder="Состояние: Исправен, царапины..." value={returnCondition} onChange={e => setReturnCondition(e.target.value)} />
+              <select className="form-select" value={returnStatus} onChange={e => setReturnStatus(e.target.value)}>
+                <option value="AVAILABLE">Вернуть на склад</option>
+                <option value="REPAIR">Отправить в ремонт</option>
+                <option value="WRITTEN_OFF">Списать</option>
+              </select>
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="button" className="inline-btn" onClick={() => setReturnLogId(null)}>Отмена</button>
                 <button type="submit" className="btn-submit">Оформить возврат</button>
@@ -382,8 +459,11 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
           </div>
         </div>
       )}
+      
+      <div style={{ display: 'none' }}>
+        <PrintToolAct ref={printActRef} log={activeLogForPrint} tool={activeToolForPrint} />
+      </div>
+
     </div>
   );
 }
-
-

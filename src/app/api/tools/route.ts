@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,7 @@ export async function GET(request: Request) {
   }
   try {
     const tools = await prisma.tool.findMany({
+      where: { isArchived: false },
       include: {
         holder: true,
         logs: {
@@ -65,15 +66,22 @@ export async function PATCH(request: Request) {
   }
   try {
     const body = await request.json();
-    const { id, status } = body;
+    const { id, status, name, serialNumber, category } = body;
     
-    if (!id || !status) {
-      return NextResponse.json({ error: 'id and status are required' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
+
+    const data: any = {};
+    if (status !== undefined) data.status = status;
+    if (status === 'AVAILABLE') data.holderId = null; // Clear holder if returned to available
+    if (name !== undefined) data.name = name;
+    if (serialNumber !== undefined) data.serialNumber = serialNumber;
+    if (category !== undefined) data.category = category;
 
     const tool = await prisma.tool.update({
       where: { id: Number(id) },
-      data: { status },
+      data,
     });
 
     return NextResponse.json(tool);
@@ -95,9 +103,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    await prisma.tool.delete({
-      where: { id: Number(id) },
-    });
+    await prisma.tool.update({ where: { id: Number(id) }, data: { isArchived: true } });
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -105,3 +111,6 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Failed to delete tool' }, { status: 500 });
   }
 }
+
+
+

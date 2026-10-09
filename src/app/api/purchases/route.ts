@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -90,36 +90,55 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!(await validateApprover(request))) {
+  if (!(await validateAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const body = await request.json();
-    const { id, status } = body;
+    const { id, status, title, amount, projectId, fileUrl } = body;
     
-    if (!id || !status) {
-      return NextResponse.json({ error: 'id and status are required' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
+
+    const data: any = {};
+    if (status !== undefined) data.status = status;
+    if (title !== undefined) data.title = title;
+    if (amount !== undefined) data.amount = Number(amount);
+    if (projectId !== undefined) data.projectId = projectId ? Number(projectId) : null;
+    if (fileUrl !== undefined) data.fileUrl = fileUrl;
 
     const purchase = await prisma.purchaseRequest.update({
       where: { id: Number(id) },
-      data: { status },
+      data,
       include: { project: true }
     });
-
-    // If approved, optionally add it to the project actual costs? The ТЗ says:
-    // "после перехода в статус APPROVED сумма автоматически относится на фактические затраты соответствующего проекта"
-    // Wait, the Project model doesn't have a "actualCosts" field, only "budget".
-    // But tasks have "cost". Let's assume actual cost of the project is calculated dynamically 
-    // from Tasks costs + Purchases amount, or we can just update a project field if it existed.
-    // For now, calculating dynamically in the frontend or dashboard is best.
-
-    const user = await validateAuth(request);
-    await createAuditLog(user?.id || null, 'UPDATE_PURCHASE', `Обновлен статус заявки #${purchase.id} на ${status}`);
 
     return NextResponse.json(purchase);
   } catch (error) {
     console.error('PATCH /api/purchases error:', error);
-    return NextResponse.json({ error: 'Failed to update purchase request' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!(await validateAuth(request))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    await prisma.purchaseRequest.delete({
+      where: { id: Number(id) },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/purchases error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

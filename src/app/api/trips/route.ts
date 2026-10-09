@@ -92,26 +92,59 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!(await validateApprover(request))) {
+  if (!(await validateAuth(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const body = await request.json();
-    const { id, status } = body;
+    const { id, status, employeeId, destination, purpose, startDate, endDate, budget, projectId } = body;
     
-    if (!id || !status) {
-      return NextResponse.json({ error: 'id and status are required' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
+
+    const data: any = {};
+    if (status !== undefined) data.status = status;
+    if (employeeId !== undefined) data.employeeId = Number(employeeId);
+    if (destination !== undefined) data.destination = destination;
+    if (purpose !== undefined) data.purpose = purpose;
+    if (startDate !== undefined) data.startDate = new Date(startDate);
+    if (endDate !== undefined) data.endDate = new Date(endDate);
+    if (budget !== undefined) data.budget = Number(budget);
+    if (projectId !== undefined) data.projectId = projectId ? Number(projectId) : null;
 
     const trip = await prisma.businessTrip.update({
       where: { id: Number(id) },
-      data: { status },
+      data,
     });
 
     return NextResponse.json(trip);
   } catch (error) {
     console.error('PATCH /api/trips error:', error);
-    return NextResponse.json({ error: 'Failed to update trip status' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  if (!(await validateAuth(request))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    await prisma.businessTrip.delete({
+      where: { id: Number(id) },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/trips error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 
