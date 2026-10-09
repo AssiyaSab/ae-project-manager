@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { formatDate } from '@/lib/formatters';
@@ -73,6 +73,31 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     }
   };
 
+  const handleDeleteTrip = async (id: number) => {
+    if (!window.confirm('Вы уверены, что хотите удалить эту командировку?')) return;
+    try {
+      await fetch('/api/trips?id=' + id, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' }
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeletePurchase = async (id: number) => {
+    if (!window.confirm('Вы уверены, что хотите удалить эту заявку?')) return;
+    try {
+      await fetch('/api/purchases?id=' + id, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': pass || '', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' }
+      });
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    }
+  };
   // Генерация PDF: Командировочное удостоверение
   const tripPrintRef = useRef(null);
   const [activeTripForPrint, setActiveTripForPrint] = useState<any>(null);
@@ -149,7 +174,10 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
                 <div key={t.id} style={{ padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', minWidth: '250px' }}>
                   <div style={{ fontWeight: 'bold' }}>{t.employee?.name}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>{t.destination} ({formatDate(t.startDate)})</div>
-                  <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', width: '100%' }}>Скачать PDF</button>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', flex: 1 }}>Скачать PDF</button>
+                    <button onClick={() => handleDeleteTrip(t.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>🗑️</button>
+                  </div>
                 </div>
               ))}
               {trips.filter(t => t.status === 'APPROVED' || t.status === 'COMPLETED').length === 0 && <div style={{ color: 'var(--text-muted)' }}>Нет согласованных командировок</div>}
@@ -165,7 +193,10 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
                 <div key={p.id} style={{ padding: '15px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', minWidth: '250px' }}>
                   <div style={{ fontWeight: 'bold' }}>{p.title}</div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>{p.amount.toLocaleString()} ₸ ({p.project?.name})</div>
-                  <button onClick={() => generatePurchasePDF(p)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', width: '100%' }}>Скачать PDF</button>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <button onClick={() => generatePurchasePDF(p)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', flex: 1 }}>Скачать PDF</button>
+                    <button onClick={() => handleDeletePurchase(p.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>🗑️</button>
+                  </div>
                 </div>
               ))}
               {purchases.filter(p => p.status === 'APPROVED' || p.status === 'PAID').length === 0 && <div style={{ color: 'var(--text-muted)' }}>Нет согласованных закупок</div>}
@@ -197,6 +228,8 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     </div>
   );
 }
+
+
 
 
 
