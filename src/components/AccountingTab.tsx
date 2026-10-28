@@ -44,9 +44,13 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
       const data = purchases.map(p => ({
         'Дата': formatDate(p.createdAt),
         'ID заявки': p.id,
+        'Тип': p.type === 'EXPENSE' ? 'Подотчет / Чек' : 'Счет на ТОО',
         'ФИО сотрудника': p.requester?.name || 'Неизвестно',
         'Назначение платежа': p.title,
+        'Поставщик': p.supplierName || '-',
+        'Номер счета': p.invoiceNumber || '-',
         'Сумма (KZT)': p.amount,
+        'Срок поставки': p.plannedDeliveryDate ? formatDate(p.plannedDeliveryDate) : '-',
         'Проект': p.project?.name || '-',
         'Статус': p.status
       }));

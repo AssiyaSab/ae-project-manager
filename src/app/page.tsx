@@ -856,7 +856,7 @@ export default function Home() {
             />
           </div>
           <nav className="dashboard-nav">
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER') && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
               <button 
                 className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
                 onClick={() => setActiveTab('dashboard')}
@@ -912,7 +912,7 @@ export default function Home() {
               📦 Инструменты
             </button>
             
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER') && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
               <button 
                 className={`nav-btn ${activeTab === 'accounting' ? 'active' : ''}`}
                 onClick={() => setActiveTab('accounting')}
