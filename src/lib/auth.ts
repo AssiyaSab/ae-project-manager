@@ -44,6 +44,12 @@ export async function validateWarehouse(request: Request) {
   return null;
 }
 
+export async function validateSupply(request: Request) {
+  const user = await validateAuth(request);
+  if (user && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'SUPPLY')) return user;
+  return null;
+}
+
 export async function createAuditLog(userId: number | null, action: string, details: string) {
   if (userId === 0) userId = null; // Admin master password -> null
   try {

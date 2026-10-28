@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ru } from 'date-fns/locale';
@@ -75,7 +75,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   };
 
   const updatePurchaseStatus = async (id: number, status: string) => {
-    if (!['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(currentUser?.role)) return;
+    if (!['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(currentUser?.role)) return;
     try {
       await fetch('/api/purchases', {
         method: 'PATCH',
@@ -151,7 +151,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                 <th style={{ padding: '10px', textAlign: 'right' }}>Сумма</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Статус</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Док</th>
-                {['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
+                {['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(currentUser?.role) && <th style={{ padding: '10px', textAlign: 'left' }}>Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -179,7 +179,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                   <td style={{ padding: '10px' }}>
                     <button onClick={() => generatePurchasePDF(p)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.8rem' }}>📄 PDF</button>
                   </td>
-                  {['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(currentUser?.role) && (
+                  {['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                       {p.status === 'PENDING' && ['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                         <>

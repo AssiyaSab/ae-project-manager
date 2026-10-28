@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(user.role);
+    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(user.role);
     
     const purchases = await prisma.purchaseRequest.findMany({
       where: isManagement ? undefined : { requesterId: user.id },
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     let { title, amount, projectId, fileUrl, requesterId } = body;
     
-    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(user.role);
+    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(user.role);
     if (!isManagement) {
       requesterId = user.id;
     }

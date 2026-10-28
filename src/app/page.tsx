@@ -272,6 +272,8 @@ export default function Home() {
         setActiveTab('accounting');
       } else if (data.role === 'WAREHOUSE') {
         setActiveTab('tools');
+      } else if (data.role === 'SUPPLY') {
+        setActiveTab('purchases');
       } else {
         setActiveTab('my-tasks');
       }
@@ -934,7 +936,7 @@ export default function Home() {
           
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
-              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
+              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
                 style={{
@@ -1632,6 +1634,7 @@ export default function Home() {
                       <option value="ADMIN">ГИП / Администратор</option>
                       <option value="MANAGER">Руководитель</option>
                       <option value="ACCOUNTANT">Бухгалтер</option>
+                      <option value="SUPPLY">Снабжение / Закупщик</option>
                       <option value="WAREHOUSE">Кладовщик</option>
                       <option value="ENGINEER">Инженер</option>
                       <option value="ASSEMBLER">Сборщик</option>
@@ -1723,8 +1726,8 @@ export default function Home() {
                             <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{u.phone || '—'}</td>
                             <td style={{ padding: '10px' }}>{u.title || '—'}</td>
                             <td style={{ padding: '10px' }}>
-                              <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'manager' ? 'design' : u.role.toLowerCase() === 'accountant' ? 'purchase' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
-                                {u.role === 'ADMIN' ? 'ГИП' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
+                              <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'manager' ? 'design' : u.role.toLowerCase() === 'accountant' ? 'purchase' : u.role.toLowerCase() === 'supply' ? 'purchase' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
+                                {u.role === 'ADMIN' ? 'ГИП' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'SUPPLY' ? 'Снабжение' : u.role === 'WAREHOUSE' ? 'Кладовщик' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
                               </span>
                             </td>
                             <td style={{ padding: '10px' }}>
@@ -2098,6 +2101,7 @@ export default function Home() {
                   <option value="ADMIN">ГИП / Администратор</option>
                   <option value="MANAGER">Руководитель</option>
                   <option value="ACCOUNTANT">Бухгалтер</option>
+                  <option value="SUPPLY">Снабжение / Закупщик</option>
                   <option value="WAREHOUSE">Кладовщик</option>
                   <option value="ENGINEER">Инженер</option>
                   <option value="ASSEMBLER">Сборщик</option>
