@@ -119,6 +119,22 @@ export async function forwardTelegramMessage(
   }
 }
 
+export async function getTelegramFileUrl(fileId: string): Promise<string | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+  try {
+    const res = await fetch(`${TELEGRAM_API_BASE}${token}/getFile?file_id=${fileId}`);
+    const data = await res.json();
+    if (data.ok && data.result?.file_path) {
+      return `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed to get Telegram file URL:', err);
+    return null;
+  }
+}
+
 export async function setTelegramWebhook(webhookUrl: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not defined');

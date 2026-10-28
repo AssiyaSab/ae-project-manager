@@ -83,9 +83,18 @@ export async function POST(request: Request) {
         `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Сотрудник'}\n\n` +
         `⏳ Требуется первичное согласование потребности ГИПом/Руководителем.`;
 
+      const initialKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '✅ Разрешить в снабжение', callback_data: `pur_approve_need_${purchase.id}` },
+            { text: '❌ Отклонить', callback_data: `pur_reject_${purchase.id}` }
+          ]
+        ]
+      };
+
       for (const admin of admins) {
         if (admin.telegramId) {
-          await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown' });
+          await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown', reply_markup: initialKeyboard });
         }
       }
     } catch (tgError) {
@@ -135,6 +144,16 @@ export async function PATCH(request: Request) {
 
     if (!currentPurchase) {
       return NextResponse.json({ error: 'Purchase not found' }, { status: 404 });
+    }
+
+    // Security check: Personal PIN code required for invoices >= 500 000 KZT
+    if (status === 'APPROVED_FOR_PAYMENT' && (currentPurchase.amount >= 500000 || (amount && Number(amount) >= 500000))) {
+      const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+      if (dbUser && dbUser.pinCode) {
+        if (!body.pinCode || body.pinCode !== dbUser.pinCode) {
+          return NextResponse.json({ error: 'Неверный персональный ПИН-код для подтверждения крупного платежа (> 500 000 ₸)' }, { status: 403 });
+        }
+      }
     }
 
     const data: any = {};
@@ -203,9 +222,20 @@ export async function PATCH(request: Request) {
             `*Номер счета:* ${updated.invoiceNumber || 'б/н'}\n` +
             `*Сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n` +
             (updated.plannedDeliveryDate ? `*Срок поставки:* ${updated.plannedDeliveryDate.toLocaleDateString('ru-RU')}\n` : '') +
-            `\n👉 Подтвердите оплату счета для передачи в бухгалтерию.`;
+            (updated.invoiceFileUrl ? `📎 [Открыть счет](${updated.invoiceFileUrl})\n` : '') +
+            `\n👉 Подтвердите оплату счета для передачи в бухгалтерию:`;
+          
+          const invoiceKeyboard = {
+            inline_keyboard: [
+              [
+                { text: '💳 Утвердить счет к оплате', callback_data: `pur_approve_inv_${updated.id}` },
+                { text: '❌ Отклонить', callback_data: `pur_reject_${updated.id}` }
+              ]
+            ]
+          };
+
           for (const admin of admins) {
-            if (admin.telegramId) await sendTelegramMessage(admin.telegramId, msg, { parse_mode: 'Markdown' });
+            if (admin.telegramId) await sendTelegramMessage(admin.telegramId, msg, { parse_mode: 'Markdown', reply_markup: invoiceKeyboard });
           }
         }
 
@@ -218,10 +248,20 @@ export async function PATCH(request: Request) {
             `*Проект:* ${updated.project?.name}\n` +
             `*Поставщик:* ${updated.supplierName || 'Не указан'}\n` +
             `*Счет:* №${updated.invoiceNumber || 'б/н'}\n` +
-            `*К оплате:* ${updated.amount.toLocaleString('ru-RU')} ₸\n\n` +
-            `👉 Произведите оплату и прикрепите платежное поручение.`;
+            `*К оплате:* ${updated.amount.toLocaleString('ru-RU')} ₸\n` +
+            (updated.invoiceFileUrl ? `📎 [Скачать счет поставщика](${updated.invoiceFileUrl})\n` : '') +
+            `\n👉 Произведите оплату в клиент-банке и подтвердите в боте:`;
+          
+          const paymentKeyboard = {
+            inline_keyboard: [
+              [
+                { text: '💳 Подтвердить: Оплачено', callback_data: `pur_pay_inv_${updated.id}` }
+              ]
+            ]
+          };
+
           for (const acc of accountants) {
-            if (acc.telegramId) await sendTelegramMessage(acc.telegramId, msg, { parse_mode: 'Markdown' });
+            if (acc.telegramId) await sendTelegramMessage(acc.telegramId, msg, { parse_mode: 'Markdown', reply_markup: paymentKeyboard });
           }
         }
 
@@ -234,8 +274,17 @@ export async function PATCH(request: Request) {
             `*Поставщик:* ${updated.supplierName || 'Поставщик'}\n` +
             `*Сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n\n` +
             `🚚 Заказ запущен в доставку.`;
+          
+          const deliveryKeyboard = {
+            inline_keyboard: [
+              [
+                { text: '📦 Доставлено на склад', callback_data: `pur_delivered_${updated.id}` }
+              ]
+            ]
+          };
+
           for (const tgId of notifyRecipients) {
-            if (tgId) await sendTelegramMessage(tgId, msg, { parse_mode: 'Markdown' });
+            if (tgId) await sendTelegramMessage(tgId, msg, { parse_mode: 'Markdown', reply_markup: deliveryKeyboard });
           }
         }
 

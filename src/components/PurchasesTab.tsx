@@ -51,7 +51,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') : '';
 
   const fetchData = async () => {
-    if (!pass && currentUser?.role !== 'ENGINEER' && currentUser?.role !== 'ASSEMBLER') return;
+    if (!pass && !currentUser) return;
     try {
       const headers = { 
         'x-auth-password': pass || '',
@@ -105,7 +105,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
 
   const updatePurchaseStatus = async (id: number, status: string, extraData: any = {}) => {
     try {
-      await fetch('/api/purchases', {
+      const res = await fetch('/api/purchases', {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json', 
@@ -115,10 +115,25 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         },
         body: JSON.stringify({ id, status, ...extraData })
       });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Ошибка при обновлении статуса');
+        return;
+      }
       fetchData();
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleApproveInvoice = async (p: any) => {
+    let pinCode: string | undefined = undefined;
+    if (p.amount >= 500000) {
+      const enteredPin = window.prompt(`🔒 Крупная сумма счета (${p.amount.toLocaleString()} ₸ превышает 500 000 ₸).\nВведите ваш персональный 4-значный ПИН-код для подтверждения:`);
+      if (!enteredPin) return;
+      pinCode = enteredPin.trim();
+    }
+    await updatePurchaseStatus(p.id, 'APPROVED_FOR_PAYMENT', { pinCode });
   };
 
   // Open Supply Modal
@@ -627,7 +642,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                       {p.status === 'PENDING_PAYMENT_APPROVAL' && isGipOrManager && (
                         <>
                           <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'APPROVED_FOR_PAYMENT')} 
+                            onClick={() => handleApproveInvoice(p)} 
                             className="inline-btn" 
                             style={{ background: '#10b981', color: '#fff' }}
                             title="Утвердить сумму счета и передать на оплату в бухгалтерию"

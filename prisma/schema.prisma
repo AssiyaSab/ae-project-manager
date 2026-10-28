@@ -19,6 +19,7 @@ model User {
   isActive         Boolean           @default(true) // Status of employee (active or archived)
   login            String?           @unique
   password         String?
+  pinCode          String?           // Персональный 4-значный ПИН-код для подтверждения крупных операций (>500k ₸)
   tasks            Task[]
   managedProjects  Project[]         @relation("ProjectManager")
   purchaseRequests PurchaseRequest[] @relation("Requester")

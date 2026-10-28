@@ -121,6 +121,7 @@ export default function Home() {
   const [editUserTitle, setEditUserTitle] = useState('');
   const [editUserLogin, setEditUserLogin] = useState('');
   const [editUserPassword, setEditUserPassword] = useState('');
+  const [editUserPinCode, setEditUserPinCode] = useState('');
   const [editUserIsActive, setEditUserIsActive] = useState<boolean>(true);
   const [showUserModal, setShowUserModal] = useState<boolean>(false);
 
@@ -130,6 +131,7 @@ export default function Home() {
   const [newUserTitle, setNewUserTitle] = useState('');
   const [newUserLogin, setNewUserLogin] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserPinCode, setNewUserPinCode] = useState('');
 
   // Telegram Webhook Management State
   const [webhookLog, setWebhookLog] = useState<{ success?: boolean; message?: string; configuredUrl?: string; currentWebhookInfo?: any; error?: string } | null>(null);
@@ -552,6 +554,7 @@ export default function Home() {
     setEditUserTitle(user.title || '');
     setEditUserLogin((user as any).login || '');
     setEditUserPassword(''); // never populate password back
+    setEditUserPinCode((user as any).pinCode || '');
     setEditUserIsActive(user.isActive);
     setShowUserModal(true);
   };
@@ -572,6 +575,7 @@ export default function Home() {
           title: editUserTitle || null,
           login: editUserLogin || null,
           password: editUserPassword || undefined,
+          pinCode: editUserPinCode || null,
           isActive: editUserIsActive
         }),
       });
@@ -630,7 +634,8 @@ export default function Home() {
           role: newUserRole,
           title: newUserTitle || null,
           login: newUserLogin || null,
-          password: newUserPassword || null
+          password: newUserPassword || null,
+          pinCode: newUserPinCode || null
         }),
       });
       setNewUserName('');
@@ -639,6 +644,7 @@ export default function Home() {
       setNewUserTitle('');
       setNewUserLogin('');
       setNewUserPassword('');
+      setNewUserPinCode('');
       refreshData();
     } catch (err) {
       console.error(err);
@@ -1672,6 +1678,17 @@ export default function Home() {
                       onChange={(e) => setNewUserPassword(e.target.value)}
                     />
                   </div>
+                  <div className="form-group" style={{ flex: '1 1 140px', marginBottom: '0px' }}>
+                    <label className="form-label">ПИН-код (4 цифры)</label>
+                    <input 
+                      type="text" 
+                      maxLength={4}
+                      className="form-input" 
+                      placeholder="Напр: 4821" 
+                      value={newUserPinCode}
+                      onChange={(e) => setNewUserPinCode(e.target.value.replace(/\D/g, ''))}
+                    />
+                  </div>
                   <button type="submit" className="btn-submit" style={{ alignSelf: 'flex-end', height: '42px', marginTop: '10px' }}>
                     Добавить сотрудника
                   </button>
@@ -2088,6 +2105,17 @@ export default function Home() {
                   autoComplete="new-password"
                   value={editUserPassword}
                   onChange={(e) => setEditUserPassword(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Персональный ПИН-код (4 цифры для счетов &gt;500k ₸)</label>
+                <input 
+                  type="text" 
+                  maxLength={4}
+                  className="form-input" 
+                  placeholder="Напр: 4821" 
+                  value={editUserPinCode}
+                  onChange={(e) => setEditUserPinCode(e.target.value.replace(/\D/g, ''))}
                 />
               </div>
               <div className="form-group">

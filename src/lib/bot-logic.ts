@@ -114,7 +114,73 @@ export async function handleIncomingBotMessage(
 
   // 1.5 Handle File Upload (Document/Photo)
   if (fileContext && messageId && chatId) {
-    // Notify all admins about the file
+    // Check if this file is an invoice attached to a purchase request (e.g. caption has "#12" or "заявка 12")
+    const purchaseMatch = cleanText.match(/(?:#|заявк[аи]\s*)(\d+)/i);
+    if (purchaseMatch && fileContext.fileId) {
+      const purId = Number(purchaseMatch[1]);
+      const pur = await prisma.purchaseRequest.findUnique({
+        where: { id: purId },
+        include: { project: true }
+      });
+      if (pur) {
+        const { getTelegramFileUrl } = await import('./telegram');
+        const fileUrl = await getTelegramFileUrl(fileContext.fileId);
+        if (fileUrl) {
+          // Parse amount if specified in caption (e.g. 120 000 ₸ or 120000)
+          const amountMatch = cleanText.match(/(\d[\d\s]{2,})\s*(?:₸|kzt|тенге|руб)?/i);
+          const parsedAmount = amountMatch ? Number(amountMatch[1].replace(/\s/g, '')) : undefined;
+
+          // Parse supplier name if entered after #id
+          let supplierName = pur.supplierName;
+          const cleanWithoutPur = cleanText.replace(purchaseMatch[0], '').trim();
+          if (cleanWithoutPur.length > 2) {
+            supplierName = cleanWithoutPur;
+          }
+
+          await prisma.purchaseRequest.update({
+            where: { id: purId },
+            data: {
+              invoiceFileUrl: fileUrl,
+              status: 'PENDING_PAYMENT_APPROVAL',
+              ...(parsedAmount ? { amount: parsedAmount } : {}),
+              ...(supplierName ? { supplierName } : {}),
+              supplyUserId: user.id
+            }
+          });
+
+          // Notify GIP/Admin with approval buttons
+          const admins = await prisma.user.findMany({
+            where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
+          });
+          const alertMsg = `📑 *Счет прикреплен к заявке #${pur.id}*\n\n` +
+            `*Проект:* ${pur.project.name}\n` +
+            `*ТМЦ:* ${pur.title}\n` +
+            `*Поставщик:* ${supplierName || 'Поставщик'}\n` +
+            `*Сумма:* ${(parsedAmount || pur.amount).toLocaleString('ru-RU')} ₸\n` +
+            `📎 [Скачать прикрепленный счет](${fileUrl})\n\n` +
+            `👉 Подтвердите оплату счета:`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [
+                { text: '💳 Утвердить счет к оплате', callback_data: `pur_approve_inv_${pur.id}` },
+                { text: '❌ Отклонить', callback_data: `pur_reject_${pur.id}` }
+              ]
+            ]
+          };
+
+          for (const admin of admins) {
+            if (admin.telegramId) await sendTelegramMessage(admin.telegramId, alertMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
+          }
+
+          return {
+            replyText: `✅ Счет успешно прикреплен к заявке *#${pur.id}* и отправлен ГИПу на утверждение!`
+          };
+        }
+      }
+    }
+
+    // Default: Notify all admins about the file
     const admins = await prisma.user.findMany({
       where: { role: { in: ['ADMIN', 'GIP'] }, telegramId: { not: null }, isActive: true },
     });
@@ -140,6 +206,261 @@ export async function handleIncomingBotMessage(
     } else {
       return {
         replyText: `✅ Файл получен. (Обратите внимание: в системе сейчас нет активных администраторов с привязанным Telegram).`,
+      };
+    }
+  }
+
+  // 1.8 Handle 4-digit PIN verification for large invoice approvals (> 500 000 ₸)
+  if (/^\d{4}$/.test(cleanText)) {
+    const pendingLog = await prisma.auditLog.findFirst({
+      where: {
+        userId: user.id,
+        action: 'PENDING_PIN_APPROVAL',
+        createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) } // valid for 15 mins
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (pendingLog && pendingLog.details) {
+      const purId = Number(pendingLog.details);
+      const pur = await prisma.purchaseRequest.findUnique({
+        where: { id: purId },
+        include: { project: true, supplyUser: true }
+      });
+
+      if (pur) {
+        if (user.pinCode && cleanText === user.pinCode) {
+          // PIN verified! Approve invoice
+          await prisma.purchaseRequest.update({
+            where: { id: purId },
+            data: { status: 'APPROVED_FOR_PAYMENT' }
+          });
+
+          await prisma.auditLog.create({
+            data: {
+              userId: user.id,
+              action: 'APPROVE_PURCHASE_PIN',
+              details: `Утвержден крупный счет #${pur.id} (${pur.amount.toLocaleString('ru-RU')} ₸) с вводом личного ПИН-кода`
+            }
+          });
+
+          // Delete pending PIN log
+          await prisma.auditLog.delete({ where: { id: pendingLog.id } }).catch(() => {});
+
+          // Notify Accountants
+          const accountants = await prisma.user.findMany({
+            where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+          });
+          const accMsg = `💳 *Крупный счет утвержден к оплате!*\n\n` +
+            `*Проект:* ${pur.project.name}\n` +
+            `*ТМЦ:* ${pur.title}\n` +
+            `*Поставщик:* ${pur.supplierName || 'Поставщик'}\n` +
+            `*Сумма:* ${pur.amount.toLocaleString('ru-RU')} ₸\n` +
+            `*Утвердил:* ${user.name} (с подтверждением личного ПИН-кода)\n\n` +
+            (pur.invoiceFileUrl ? `📎 [Скачать счет](${pur.invoiceFileUrl})\n\n` : '') +
+            `👉 Произведите оплату в клиент-банке:`;
+          
+          const accKeyboard = {
+            inline_keyboard: [
+              [{ text: '💳 Подтвердить: Оплачено', callback_data: `pur_pay_inv_${pur.id}` }]
+            ]
+          };
+
+          for (const acc of accountants) {
+            if (acc.telegramId) await sendTelegramMessage(acc.telegramId, accMsg, { parse_mode: 'Markdown', reply_markup: accKeyboard });
+          }
+
+          return {
+            replyText: `✅ *Личный ПИН-код подтвержден!*\n\nСчет по заявке *#${pur.id}* на сумму *${pur.amount.toLocaleString('ru-RU')} ₸* успешно утвержден и передан в бухгалтерию на оплату.`
+          };
+        } else {
+          return {
+            replyText: `❌ *Неверный ПИН-код!*\nПожалуйста, введите правильный 4-значный ПИН-код из вашего профиля.`
+          };
+        }
+      }
+    }
+  }
+
+  // 1.9 Handle Procurement Callbacks
+  const purApproveNeedMatch = cleanText.match(/^pur_approve_need_(\d+)$/);
+  const purRejectMatch = cleanText.match(/^pur_reject_(\d+)$/);
+  const purApproveInvMatch = cleanText.match(/^pur_approve_inv_(\d+)$/);
+  const purPayInvMatch = cleanText.match(/^pur_pay_inv_(\d+)$/);
+  const purDeliveredMatch = cleanText.match(/^pur_delivered_(\d+)$/);
+
+  if (purApproveNeedMatch || purRejectMatch || purApproveInvMatch || purPayInvMatch || purDeliveredMatch) {
+    // 1. APPROVE NEED
+    if (purApproveNeedMatch) {
+      if (!['ADMIN', 'MANAGER', 'GIP'].includes(user.role)) {
+        return { replyText: '⚠️ У вас нет прав для согласования потребности.' };
+      }
+      const purId = Number(purApproveNeedMatch[1]);
+      const pur = await prisma.purchaseRequest.update({
+        where: { id: purId },
+        data: { status: 'IN_PROCUREMENT' },
+        include: { project: true, requester: true }
+      });
+
+      // Notify Supply
+      const supplyUsers = await prisma.user.findMany({
+        where: { role: 'SUPPLY', telegramId: { not: null } }
+      });
+      const sMsg = `📦 *Заявка #${pur.id} разрешена ГИПом в снабжение!*\n\n` +
+        `*Проект:* ${pur.project.name}\n` +
+        `*Потребность:* ${pur.title}\n` +
+        `*Заявитель:* ${pur.requester?.name}\n\n` +
+        `👉 Запросите счет у поставщика и перешлите его боту с подписью: *#${pur.id} [Поставщик] [Сумма]*`;
+      for (const sUser of supplyUsers) {
+        if (sUser.telegramId) await sendTelegramMessage(sUser.telegramId, sMsg, { parse_mode: 'Markdown' });
+      }
+
+      return {
+        replyText: `✅ Заявка *#${pur.id}* одобрена и передана в отдел снабжения!`
+      };
+    }
+
+    // 2. REJECT
+    if (purRejectMatch) {
+      if (!['ADMIN', 'MANAGER', 'GIP'].includes(user.role)) {
+        return { replyText: '⚠️ У вас нет прав для отклонения заявок.' };
+      }
+      const purId = Number(purRejectMatch[1]);
+      const pur = await prisma.purchaseRequest.update({
+        where: { id: purId },
+        data: { status: 'REJECTED' },
+        include: { project: true, requester: true }
+      });
+
+      if (pur.requester?.telegramId) {
+        await sendTelegramMessage(pur.requester.telegramId, `❌ Ваша заявка *#${pur.id}* (${pur.title}) по проекту *${pur.project.name}* была отклонена руководством.`);
+      }
+
+      return { replyText: `❌ Заявка *#${pur.id}* отклонена.` };
+    }
+
+    // 3. APPROVE INVOICE (with PIN check for >= 500k KZT!)
+    if (purApproveInvMatch) {
+      if (!['ADMIN', 'MANAGER', 'GIP'].includes(user.role)) {
+        return { replyText: '⚠️ У вас нет прав для утверждения счетов к оплате.' };
+      }
+      const purId = Number(purApproveInvMatch[1]);
+      const pur = await prisma.purchaseRequest.findUnique({
+        where: { id: purId },
+        include: { project: true }
+      });
+      if (!pur) return { replyText: '⚠️ Заявка не найдена.' };
+
+      // Check PIN threshold: 500 000 KZT
+      if (pur.amount >= 500000) {
+        if (!user.pinCode) {
+          return {
+            replyText: `⚠️ *Сумма счета ${pur.amount.toLocaleString('ru-RU')} ₸ превышает 500 000 ₸!*\n\n` +
+              `Для подтверждения требуется личный ПИН-код, но он еще не установлен в вашем профиле.\n` +
+              `Пожалуйста, установите 4-значный ПИН-код в панели управления сотрудниками или согласуйте счет через веб-портал.`
+          };
+        }
+
+        // Record pending PIN approval state
+        await prisma.auditLog.create({
+          data: {
+            userId: user.id,
+            action: 'PENDING_PIN_APPROVAL',
+            details: String(pur.id)
+          }
+        });
+
+        return {
+          replyText: `🔒 *Подтверждение крупного платежа: ${pur.amount.toLocaleString('ru-RU')} ₸*\n\n` +
+            `*Поставщик:* ${pur.supplierName || 'Поставщик'}\n` +
+            `*Проект:* ${pur.project.name}\n` +
+            `*ТМЦ:* ${pur.title}\n\n` +
+            `👉 Введите ваш персональный 4-значный ПИН-код для подтверждения оплаты:`
+        };
+      }
+
+      // If under 500 000 KZT: approve immediately
+      await prisma.purchaseRequest.update({
+        where: { id: purId },
+        data: { status: 'APPROVED_FOR_PAYMENT' }
+      });
+
+      // Notify accountants
+      const accountants = await prisma.user.findMany({
+        where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+      });
+      const accMsg = `💳 *Счет утвержден к оплате!*\n\n` +
+        `*Проект:* ${pur.project.name}\n` +
+        `*ТМЦ:* ${pur.title}\n` +
+        `*Поставщик:* ${pur.supplierName || 'Не указан'}\n` +
+        `*Сумма:* ${pur.amount.toLocaleString('ru-RU')} ₸\n\n` +
+        (pur.invoiceFileUrl ? `📎 [Скачать счет](${pur.invoiceFileUrl})\n\n` : '') +
+        `👉 Произведите оплату в клиент-банке:`;
+      const accKeyboard = {
+        inline_keyboard: [
+          [{ text: '💳 Подтвердить: Оплачено', callback_data: `pur_pay_inv_${pur.id}` }]
+        ]
+      };
+      for (const acc of accountants) {
+        if (acc.telegramId) await sendTelegramMessage(acc.telegramId, accMsg, { parse_mode: 'Markdown', reply_markup: accKeyboard });
+      }
+
+      return {
+        replyText: `✅ Счет по заявке *#${pur.id}* на сумму *${pur.amount.toLocaleString('ru-RU')} ₸* успешно утвержден и передан в бухгалтерию!`
+      };
+    }
+
+    // 4. PAY INVOICE (Accountant)
+    if (purPayInvMatch) {
+      if (!['ACCOUNTANT', 'ADMIN'].includes(user.role)) {
+        return { replyText: '⚠️ У вас нет прав бухгалтера для отметки оплаты.' };
+      }
+      const purId = Number(purPayInvMatch[1]);
+      const pur = await prisma.purchaseRequest.update({
+        where: { id: purId },
+        data: { status: 'PAID_AND_ORDERED', paidAt: new Date() },
+        include: { project: true, requester: true, supplyUser: true }
+      });
+
+      // Notify supply and requester
+      const notifyRecipients = [pur.requester?.telegramId, pur.supplyUser?.telegramId].filter(Boolean);
+      const paidMsg = `✅ *Счет оплачен*\n\n` +
+        `*Проект:* ${pur.project.name}\n` +
+        `*ТМЦ:* ${pur.title}\n` +
+        `*Поставщик:* ${pur.supplierName || 'Поставщик'}\n` +
+        `*Сумма:* ${pur.amount.toLocaleString('ru-RU')} ₸\n\n` +
+        `🚚 Заказ запущен в доставку.`;
+      
+      const delivKeyboard = {
+        inline_keyboard: [
+          [{ text: '📦 Доставлено на склад', callback_data: `pur_delivered_${pur.id}` }]
+        ]
+      };
+
+      for (const tgId of notifyRecipients) {
+        if (tgId) await sendTelegramMessage(tgId, paidMsg, { parse_mode: 'Markdown', reply_markup: delivKeyboard });
+      }
+
+      return {
+        replyText: `✅ Оплата счета по заявке *#${pur.id}* подтверждена!`
+      };
+    }
+
+    // 5. DELIVERED
+    if (purDeliveredMatch) {
+      const purId = Number(purDeliveredMatch[1]);
+      const pur = await prisma.purchaseRequest.update({
+        where: { id: purId },
+        data: { status: 'DELIVERED', deliveredAt: new Date(), receivedByUserId: user.id },
+        include: { project: true, requester: true }
+      });
+
+      if (pur.requester?.telegramId) {
+        await sendTelegramMessage(pur.requester.telegramId, `🎉 *Материалы поступили!*\n\nПо вашей заявке *#${pur.id}* (${pur.title}) для проекта *${pur.project.name}* заказ доставлен и готов к выдаче в производство / на объект.`);
+      }
+
+      return {
+        replyText: `📦 Отметка доставки сохранена! Заявка *#${pur.id}* закрыта как доставленная.`
       };
     }
   }
