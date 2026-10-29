@@ -175,7 +175,7 @@ model SaleOrder {
   brand                  String?         @default("ONKA") // "ONKA" | "WEG" | "MIXED"
   status                 String          @default("DRAFT") // "DRAFT" | "INVOICE_SENT" | "PAID" | "READY_FOR_PICKUP" | "SHIPPED"
   totalAmount            Float           @default(0) // Итоговая сумма (KZT)
-  vatRate                Float           @default(12) // Ставка НДС (%)
+  vatRate                Float           @default(16) // Ставка НДС (%) - 16%
   vatAmount              Float           @default(0) // Сумма НДС (KZT)
   invoiceDate            DateTime        @default(now()) // Дата выставления счета
   paidAt                 DateTime?       // Дата фиксации оплаты

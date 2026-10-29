@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       };
     });
 
-    const vatRate = 12; // 12% НДС в РК
+    const vatRate = 16; // 16% НДС
     const vatAmount = Math.round((calculatedTotal * vatRate) / (100 + vatRate) * 100) / 100;
 
     const order = await prisma.saleOrder.create({

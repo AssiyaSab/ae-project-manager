@@ -19,7 +19,7 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
   const year = invoiceDate.getFullYear();
 
   const totalAmount = Number(order.totalAmount) || 0;
-  const vatRate = Number(order.vatRate) || 12;
+  const vatRate = Number(order.vatRate) || 16;
   const vatAmount = Number(order.vatAmount) || Math.round((totalAmount * vatRate) / (100 + vatRate) * 100) / 100;
   const subtotal = Math.round((totalAmount - vatAmount) * 100) / 100;
 
@@ -47,12 +47,13 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
           <div>
             <div style={{ fontWeight: 'bold', fontSize: '14px' }}>ТОО «АзияЭнергоАвтоматика»</div>
             <div style={{ fontSize: '11px', color: '#333' }}>Поставка электрооборудования ONKA и WEG в Республике Казахстан</div>
+            <div style={{ fontSize: '10px', color: '#555' }}>Свидетельство НДС №0072706 Серия 60001 от 23.02.2015г.</div>
           </div>
         </div>
         <div style={{ textAlign: 'right', fontSize: '11px', color: '#555' }}>
-          <div>г. Алматы, ул. Толе би 187</div>
-          <div>Тел: +7 (727) 349-50-60</div>
-          <div>info@asiaenergo.kz</div>
+          <div>г. Алматы, ул. Бокейханова, 53а, 050014</div>
+          <div>тел/факс: +7 (727) 224-31-62, 386-29-94</div>
+          <div>office@ae-automation.kz</div>
         </div>
       </div>
 
@@ -65,37 +66,37 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
         <tbody>
           <tr>
             <td colSpan={2} style={{ border: '1px solid #000', padding: '4px 8px', verticalAlign: 'top', width: '65%' }}>
-              АО «Народный Банк Казахстана» (Halyk Bank), г. Алматы<br />
+              АО «Alatau City Bank»<br />
               <span style={{ fontSize: '9px', color: '#666' }}>Банк получателя</span>
             </td>
             <td style={{ border: '1px solid #000', padding: '4px 8px', verticalAlign: 'top', width: '15%' }}>
               <strong>БИК</strong>
             </td>
             <td style={{ border: '1px solid #000', padding: '4px 8px', verticalAlign: 'top', width: '20%' }}>
-              HSBKKZKX
+              TSESKZKA
             </td>
           </tr>
           <tr>
-            <td style={{ border: '1px solid #000', padding: '4px 8px', width: '20%' }}>
-              <strong>БИН</strong> 191240026857
+            <td style={{ border: '1px solid #000', padding: '4px 8px', width: '32%' }}>
+              <strong>БИН</strong> 150140009432 &nbsp;|&nbsp; <strong>РНН</strong> 600500610307
             </td>
-            <td style={{ border: '1px solid #000', padding: '4px 8px', width: '45%' }}>
+            <td style={{ border: '1px solid #000', padding: '4px 8px', width: '33%' }}>
               <strong>Кбе</strong> 17
             </td>
             <td style={{ border: '1px solid #000', padding: '4px 8px' }}>
-              <strong>Счет №</strong>
+              <strong>Счет № (ИИК)</strong>
             </td>
-            <td style={{ border: '1px solid #000', padding: '4px 8px' }}>
-              KZ126010002003847291
+            <td style={{ border: '1px solid #000', padding: '4px 8px', fontWeight: 'bold' }}>
+              KZ39998CTB0000477153
             </td>
           </tr>
           <tr>
             <td colSpan={2} style={{ border: '1px solid #000', padding: '4px 8px' }}>
               ТОО «АзияЭнергоАвтоматика»<br />
-              <span style={{ fontSize: '9px', color: '#666' }}>Получатель</span>
+              <span style={{ fontSize: '9px', color: '#666' }}>Получатель (Свид. НДС №0072706 Серия 60001 от 23.02.2015г.)</span>
             </td>
             <td style={{ border: '1px solid #000', padding: '4px 8px' }}>
-              <strong>Код назн.</strong>
+              <strong>Код назн. (КНП)</strong>
             </td>
             <td style={{ border: '1px solid #000', padding: '4px 8px' }}>
               710
@@ -115,7 +116,7 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
           <tr>
             <td style={{ width: '100px', fontWeight: 'bold', verticalAlign: 'top', padding: '3px 0' }}>Поставщик:</td>
             <td style={{ verticalAlign: 'top', padding: '3px 0' }}>
-              <strong>ТОО «АзияЭнергоАвтоматика»</strong>, БИН 191240026857, г. Алматы, ул. Толе би 187, тел. +7 (727) 349-50-60
+              <strong>ТОО «АзияЭнергоАвтоматика»</strong>, БИН: 150140009432, РНН: 600500610307, г. Алматы, ул. Бокейханова, 53а, 050014, тел: +7 (727) 224-31-62, 386-29-94, email: office@ae-automation.kz
             </td>
           </tr>
           <tr>
@@ -197,7 +198,7 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
           <div style={{ width: '48%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span>Руководитель:</span>
-              <span style={{ textDecoration: 'underline' }}>Быкаев К.Ж.</span>
+              <span style={{ textDecoration: 'underline' }}>Директор Быкаев К.Ж. (на основании Устава)</span>
             </div>
             <div style={{ fontSize: '9px', textAlign: 'center', color: '#666' }}>(подпись / расшифровка)</div>
           </div>

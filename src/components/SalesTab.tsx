@@ -904,7 +904,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
 
                 {/* Предварительный расчет */}
                 <div style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px', textAlign: 'right', fontSize: '0.9rem' }}>
-                  <div style={{ color: 'var(--text-muted)' }}>В т.ч. НДС (12%): {Math.round((calculateFormTotal() * 12) / 112).toLocaleString('ru-RU')} ₸</div>
+                  <div style={{ color: 'var(--text-muted)' }}>В т.ч. НДС (16%): {Math.round((calculateFormTotal() * 16) / 116).toLocaleString('ru-RU')} ₸</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: 700, color: 'var(--accent-orange)', marginTop: '4px' }}>
                     Итого к оплате: {calculateFormTotal().toLocaleString('ru-RU')} ₸
                   </div>

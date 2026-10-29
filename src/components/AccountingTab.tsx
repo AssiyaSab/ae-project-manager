@@ -100,7 +100,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
         'Бренд': s.brand || 'ONKA',
         'Кол-во позиций': s.items?.length || 0,
         'Сумма без НДС (KZT)': Math.round(((s.totalAmount || 0) - (s.vatAmount || 0)) * 100) / 100,
-        'НДС 12% (KZT)': s.vatAmount || 0,
+        'НДС 16% (KZT)': s.vatAmount || 0,
         'Всего с НДС (KZT)': s.totalAmount || 0,
         'Статус оплаты': s.paidAt ? `Оплачено (${formatDate(s.paidAt)})` : (s.status === 'PAID' ? 'Оплачено' : 'Ожидает оплаты'),
         'Статус отгрузки': s.status === 'SHIPPED' ? 'Отгружен (Закрыт)' : s.status,
