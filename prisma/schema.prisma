@@ -29,6 +29,8 @@ model User {
   heldTools        Tool[]
   toolLogs         ToolLog[]
   auditLogs        AuditLog[]
+  createdSaleOrders SaleOrder[]       @relation("SaleOrderCreatedBy")
+  shippedSaleOrders SaleOrder[]       @relation("SaleOrderShippedBy")
 }
 
 model Project {
@@ -159,4 +161,59 @@ model AuditLog {
   details   String?
   createdAt DateTime @default(now())
 }
+
+// --- МОДУЛЬ ПРОДАЖ ОБОРУДОВАНИЯ (ONKA / WEG) ---
+
+model SaleOrder {
+  id                     Int             @id @default(autoincrement())
+  orderNumber            String          @unique // Например: "СЧ-2026-001"
+  customerName           String          // Наименование покупателя (ТОО / ИП / Физ.лицо)
+  customerBin            String?         // БИН / ИИН покупателя
+  customerPhone          String?         // Контактный телефон
+  customerEmail          String?         // Email для отправки счета
+  customerAddress        String?         // Юридический / фактический адрес
+  brand                  String?         @default("ONKA") // "ONKA" | "WEG" | "MIXED"
+  status                 String          @default("DRAFT") // "DRAFT" | "INVOICE_SENT" | "PAID" | "READY_FOR_PICKUP" | "SHIPPED"
+  totalAmount            Float           @default(0) // Итоговая сумма (KZT)
+  vatRate                Float           @default(12) // Ставка НДС (%)
+  vatAmount              Float           @default(0) // Сумма НДС (KZT)
+  invoiceDate            DateTime        @default(now()) // Дата выставления счета
+  paidAt                 DateTime?       // Дата фиксации оплаты
+  shippedAt              DateTime?       // Дата фактической отгрузки со склада
+  notes                  String?         // Примечания к сделке
+
+  // Обязательные поля доверенности покупателя при отгрузке
+  powerOfAttorneyNumber  String?         // Номер доверенности (например, "№ 12-Д")
+  powerOfAttorneyDate    DateTime?       // Дата выдачи доверенности
+  issuedToName           String?         // ФИО доверенного лица, принимающего товар
+  powerOfAttorneyFileUrl String?         // Скан / фото оригинала доверенности
+
+  // Пользователи
+  createdById            Int?
+  createdBy              User?           @relation("SaleOrderCreatedBy", fields: [createdById], references: [id])
+  warehouseUserId        Int?
+  warehouseUser          User?           @relation("SaleOrderShippedBy", fields: [warehouseUserId], references: [id])
+
+  items                  SaleOrderItem[]
+
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+}
+
+model SaleOrderItem {
+  id          Int       @id @default(autoincrement())
+  orderId     Int
+  order       SaleOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  brand       String    @default("ONKA") // "ONKA" | "WEG" | "ДРУГОЕ"
+  article     String    // Артикул / каталожный номер
+  name        String    // Наименование оборудования/позиции
+  unit        String    @default("шт") // Единица измерения
+  quantity    Float     @default(1)    // Количество
+  price       Float     @default(0)    // Цена за единицу с НДС (KZT)
+  total       Float     @default(0)    // Итоговая сумма строки (quantity * price)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
 

@@ -5,6 +5,7 @@ import PurchasesTab from '@/components/PurchasesTab';
 import TripsTab from '@/components/TripsTab';
 import ToolsTab from '@/components/ToolsTab';
 import AccountingTab from '@/components/AccountingTab';
+import SalesTab from '@/components/SalesTab';
 import { formatDate, formatDateTime } from '@/lib/formatters';
 
 interface User {
@@ -63,7 +64,7 @@ interface ChatMessage {
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks' | 'sales'>('dashboard');
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -904,6 +905,12 @@ export default function Home() {
               onClick={() => setActiveTab('purchases')}
             >
               🛒 Закупки ТМЦ
+            </button>
+            <button 
+              className={`nav-btn ${activeTab === 'sales' ? 'active' : ''}`}
+              onClick={() => setActiveTab('sales')}
+            >
+              ⚡ Продажи (ONKA/WEG)
             </button>
             <button 
               className={`nav-btn ${activeTab === 'trips' ? 'active' : ''}`}
@@ -1901,6 +1908,10 @@ export default function Home() {
 
           {activeTab === 'accounting' && (
             <AccountingTab currentUser={currentUser} projects={projects} users={users} />
+          )}
+
+          {activeTab === 'sales' && (
+            <SalesTab currentUser={currentUser} />
           )}
         </main>
       </div>

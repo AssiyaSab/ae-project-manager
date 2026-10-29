@@ -14,21 +14,28 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
   const [purchases, setPurchases] = useState<any[]>([]);
   const [trips, setTrips] = useState<any[]>([]);
   const [tools, setTools] = useState<any[]>([]);
+  const [sales, setSales] = useState<any[]>([]);
 
   const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') : '';
 
   const fetchData = async () => {
     if (!pass) return;
     try {
-      const headers = { 'x-auth-password': pass };
-      const [pRes, tRes, tlRes] = await Promise.all([
+      const headers = { 
+        'x-auth-password': pass,
+        'x-admin-password': pass,
+        'x-auth-login': typeof window !== 'undefined' ? localStorage.getItem('ae_auth_login') || '' : ''
+      };
+      const [pRes, tRes, tlRes, sRes] = await Promise.all([
         fetch('/api/purchases', { headers }).then(r => r.json()),
         fetch('/api/trips', { headers }).then(r => r.json()),
-        fetch('/api/tools', { headers }).then(r => r.json())
+        fetch('/api/tools', { headers }).then(r => r.json()),
+        fetch('/api/sales', { headers }).then(r => r.json()).catch(() => [])
       ]);
       if (Array.isArray(pRes)) setPurchases(pRes);
       if (Array.isArray(tRes)) setTrips(tRes);
       if (Array.isArray(tlRes)) setTools(tlRes);
+      if (Array.isArray(sRes)) setSales(sRes);
     } catch (e) {
       console.error(e);
     }
@@ -74,6 +81,56 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     } catch (e) {
       console.error(e);
       alert("Произошла ошибка при выгрузке в Excel. Проверьте, установлена ли библиотека xlsx.");
+    }
+  };
+
+  // Экспорт реестра закрытых продаж оборудования (ONKA / WEG) для проведения накладных в 1С
+  const exportSalesToExcel = () => {
+    try {
+      const closedSales = sales.filter(s => s.status === 'SHIPPED' || s.status === 'PAID');
+      const salesToExport = closedSales.length > 0 ? closedSales : sales;
+
+      const data = salesToExport.map(s => ({
+        'Номер счета': s.orderNumber,
+        'Дата счета': formatDate(s.invoiceDate || s.createdAt),
+        'Покупатель': s.customerName,
+        'БИН / ИИН': s.customerBin || '-',
+        'Телефон': s.customerPhone || '-',
+        'Адрес': s.customerAddress || '-',
+        'Бренд': s.brand || 'ONKA',
+        'Кол-во позиций': s.items?.length || 0,
+        'Сумма без НДС (KZT)': Math.round(((s.totalAmount || 0) - (s.vatAmount || 0)) * 100) / 100,
+        'НДС 12% (KZT)': s.vatAmount || 0,
+        'Всего с НДС (KZT)': s.totalAmount || 0,
+        'Статус оплаты': s.paidAt ? `Оплачено (${formatDate(s.paidAt)})` : (s.status === 'PAID' ? 'Оплачено' : 'Ожидает оплаты'),
+        'Статус отгрузки': s.status === 'SHIPPED' ? 'Отгружен (Закрыт)' : s.status,
+        'Дата фактической отгрузки': s.shippedAt ? formatDate(s.shippedAt) : '-',
+        'Номер доверенности': s.powerOfAttorneyNumber || '-',
+        'Дата доверенности': s.powerOfAttorneyDate ? formatDate(s.powerOfAttorneyDate) : '-',
+        'ФИО получателя по доверенности': s.issuedToName || '-',
+        'Скан доверенности (URL)': s.powerOfAttorneyFileUrl || '-',
+        'Кладовщик (отпустил товар)': s.warehouseUser?.name || 'Склад',
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Продажи и доверенности 1С");
+      
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Reestr_Prodazh_ONKA_WEG_1C.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      
+      alert("Реестр закрытых продаж и доверенностей для 1С успешно выгружен в Excel!");
+    } catch (e) {
+      console.error(e);
+      alert("Ошибка при выгрузке реестра продаж в Excel.");
     }
   };
 
@@ -165,20 +222,52 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     doc.save(`Akt_Peredachi_TMC_${tool.id}.pdf`);
   };
 
-  if (currentUser?.role !== 'ADMIN') {
-    return <div style={{ color: 'var(--text-muted)' }}>Доступ к разделу Бухгалтерии есть только у Директора (Администратора).</div>;
+  if (currentUser?.role !== 'ADMIN' && currentUser?.role !== 'ACCOUNTANT') {
+    return <div style={{ color: 'var(--text-muted)' }}>Доступ к разделу Бухгалтерии есть только у Директора и Бухгалтера.</div>;
   }
 
+  const shippedSalesCount = sales.filter(s => s.status === 'SHIPPED').length;
+  const totalSalesRevenue = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+      
+      {/* 1. Модуль интеграции с 1С (Выгрузка расходов и закрытых продаж) */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 className="card-title" style={{ margin: 0 }}>📊 Сводные реестры и 1С</h2>
-          <button onClick={exportToExcel} className="btn-submit" style={{ margin: 0, padding: '8px 16px', background: '#10b981', color: '#fff' }}>
-            📥 Скачать реестр расходов (Excel)
-          </button>
+        <h2 className="card-title" style={{ marginBottom: '15px' }}>📊 Сводные реестры для 1С:Предприятие</h2>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+          
+          {/* Расходы и закупки */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#38bdf8', marginBottom: '6px' }}>🛒 Реестр расходов и закупок ТМЦ</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 14px 0' }}>
+                Включает все безналичные счета поставщиков и подотчетные чеки сотрудников с привязкой к проектам.
+              </p>
+            </div>
+            <button onClick={exportToExcel} className="btn-submit" style={{ margin: 0, padding: '10px 16px', background: '#10b981', color: '#fff', fontWeight: 600 }}>
+              📥 Скачать реестр расходов (Excel)
+            </button>
+          </div>
+
+          {/* Продажи оборудования и доверенности */}
+          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#a78bfa', marginBottom: '6px' }}>⚡ Продажи ONKA / WEG и доверенности</div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 8px 0' }}>
+                Закрытые продажи со всеми реквизитами покупателей, номерами и датами доверенностей для проведения расходных накладных в 1С.
+              </p>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                Всего закрыто отгрузок: <strong style={{ color: '#34d399' }}>{shippedSalesCount}</strong> | Общий оборот: <strong>{totalSalesRevenue.toLocaleString('ru-RU')} ₸</strong>
+              </div>
+            </div>
+            <button onClick={exportSalesToExcel} className="btn-submit" style={{ margin: 0, padding: '10px 16px', background: '#8b5cf6', color: '#fff', fontWeight: 600 }}>
+              📥 Скачать продажи и доверенности 1С (Excel)
+            </button>
+          </div>
+
         </div>
-        <p style={{ color: 'var(--text-muted)' }}>Реестр включает все созданные заявки на закупку и может быть импортирован в 1С Бухгалтерию.</p>
       </div>
 
       <div className="card">
