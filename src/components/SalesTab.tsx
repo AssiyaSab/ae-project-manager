@@ -338,10 +338,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
         <div>
           <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 5px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            ⚡ Продажи электрооборудования
-            <span style={{ fontSize: '0.85rem', padding: '3px 10px', borderRadius: '12px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-              ONKA / WEG
-            </span>
+            💼 Продажи
           </h2>
           <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.88rem' }}>
             Выставление официальных счетов на оплату РК и контроль отгрузки по доверенности покупателя

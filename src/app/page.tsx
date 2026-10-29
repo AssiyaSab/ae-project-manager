@@ -910,7 +910,7 @@ export default function Home() {
               className={`nav-btn ${activeTab === 'sales' ? 'active' : ''}`}
               onClick={() => setActiveTab('sales')}
             >
-              ⚡ Продажи (ONKA/WEG)
+              💼 Продажи
             </button>
             <button 
               className={`nav-btn ${activeTab === 'trips' ? 'active' : ''}`}

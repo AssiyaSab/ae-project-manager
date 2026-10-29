@@ -254,7 +254,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
           {/* Продажи оборудования и доверенности */}
           <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#a78bfa', marginBottom: '6px' }}>⚡ Продажи ONKA / WEG и доверенности</div>
+              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#a78bfa', marginBottom: '6px' }}>💼 Продажи и доверенности (1С)</div>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 8px 0' }}>
                 Закрытые продажи со всеми реквизитами покупателей, номерами и датами доверенностей для проведения расходных накладных в 1С.
               </p>
