@@ -152,7 +152,7 @@ export default function Home() {
   };
 
   const handleCopyInvite = () => {
-    const text = `👋 Коллеги, мы запустили Telegram-бота для фиксации статусов и задач!\n\n1️⃣ Откройте бота: https://t.me/your_bot_username\n2️⃣ Нажмите /start и кнопку «📱 Поделиться контактом» (или отправьте свой номер телефона)\n3️⃣ Нажмите /tasks, чтобы увидеть текущие задачи\n\n💡 Если у вас возник блокер или задержка от смежников (АР, КР, ОВ, ВК, ЭОМ) — просто напишите текстом в бот (например: «Ждем подоснову от ОВ»), ИИ сам зафиксирует проблему и уведомит ГИПа!`;
+    const text = `👋 Коллеги, мы запустили Telegram-бота для фиксации статусов и задач!\n\n1️⃣ Откройте бота: https://t.me/your_bot_username\n2️⃣ Нажмите /start и кнопку «📱 Поделиться контактом» (или отправьте свой номер телефона)\n3️⃣ Нажмите /tasks, чтобы увидеть текущие задачи\n\n💡 Если у вас возник блокер или задержка от смежников (АР, КР, ОВ, ВК, ЭОМ) — просто напишите текстом в бот (например: «Ждем подоснову от ОВ»), ИИ сам зафиксирует проблему и уведомит Директора!`;
     navigator.clipboard.writeText(text);
     setCopiedInvite(true);
     setTimeout(() => setCopiedInvite(false), 3000);
@@ -704,7 +704,7 @@ export default function Home() {
       u.name,
       u.phone || '',
       u.title || '',
-      u.role === 'ADMIN' ? 'ГИП' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик',
+      u.role === 'ADMIN' ? 'Директор' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик',
       u.isActive ? 'Активен' : 'В архиве'
     ]);
     exportToCSV('employees_report.csv', headers, rows);
@@ -800,7 +800,7 @@ export default function Home() {
 
         let role = 'ENGINEER';
         if (roleInput) {
-          if (roleInput.includes('ADMIN') || roleInput.includes('ГИП') || roleInput.includes('РУКОВОД')) {
+          if (roleInput.includes('ADMIN') || roleInput.includes('ГИП') || roleInput.includes('ДИРЕКТОР') || roleInput.includes('РУКОВОД')) {
             role = 'ADMIN';
           } else if (roleInput.includes('ASSEMBLER') || roleInput.includes('СБОР') || roleInput.includes('МОНТАЖ')) {
             role = 'ASSEMBLER';
@@ -942,7 +942,7 @@ export default function Home() {
           
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
-              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'ГИП' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
+              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Директор' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
                 style={{
@@ -1380,7 +1380,7 @@ export default function Home() {
                     </select>
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Руководитель проекта (ГИП / Инженер)</label>
+                    <label className="form-label">Руководитель проекта (Директор / Инженер)</label>
                     <select 
                       className="form-select" 
                       value={projectManagerId}
@@ -1528,7 +1528,7 @@ export default function Home() {
                       🤖 Telegram Webhook & Внедрение для инженеров
                     </h2>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      Серверный режим 24/7 на Vercel (0 серверов, мгновенные уведомления ГИПу о блокерах).
+                      Серверный режим 24/7 на Vercel (0 серверов, мгновенные уведомления Директору о блокерах).
                     </p>
                   </div>
                   <button
@@ -1599,7 +1599,7 @@ export default function Home() {
                       fontFamily: 'inherit',
                     }}
                   >
-                    {`👋 Коллеги, мы запустили систему управления задачами и фиксации блокеров в Telegram!\n\n1️⃣ Откройте бота: https://t.me/your_bot_username\n2️⃣ Нажмите /start и кнопку «📱 Поделиться контактом» (или отправьте свой номер телефона)\n3️⃣ Нажмите /tasks, чтобы увидеть текущие задачи и разделы\n\n💡 Если у вас возник блокер или задержка от смежников (АР, КР, ОВ, ВК, ЭОМ) — просто напишите текстом в бот (например: «Ждем подоснову от ОВ»), ИИ сам зафиксирует проблему и уведомит ГИПа!`}
+                    {`👋 Коллеги, мы запустили систему управления задачами и фиксации блокеров в Telegram!\n\n1️⃣ Откройте бота: https://t.me/your_bot_username\n2️⃣ Нажмите /start и кнопку «📱 Поделиться контактом» (или отправьте свой номер телефона)\n3️⃣ Нажмите /tasks, чтобы увидеть текущие задачи и разделы\n\n💡 Если у вас возник блокер или задержка от смежников (АР, КР, ОВ, ВК, ЭОМ) — просто напишите текстом в бот (например: «Ждем подоснову от ОВ»), ИИ сам зафиксирует проблему и уведомит Директора!`}
                   </pre>
                 </div>
               </section>
@@ -1637,7 +1637,7 @@ export default function Home() {
                       onChange={(e) => setNewUserRole(e.target.value)}
                       required
                     >
-                      <option value="ADMIN">ГИП / Администратор</option>
+                      <option value="ADMIN">Директор / Администратор</option>
                       <option value="MANAGER">Руководитель</option>
                       <option value="ACCOUNTANT">Бухгалтер</option>
                       <option value="SUPPLY">Снабжение / Закупщик</option>
@@ -1744,7 +1744,7 @@ export default function Home() {
                             <td style={{ padding: '10px' }}>{u.title || '—'}</td>
                             <td style={{ padding: '10px' }}>
                               <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'manager' ? 'design' : u.role.toLowerCase() === 'accountant' ? 'purchase' : u.role.toLowerCase() === 'supply' ? 'purchase' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
-                                {u.role === 'ADMIN' ? 'ГИП' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'SUPPLY' ? 'Снабжение' : u.role === 'WAREHOUSE' ? 'Кладовщик' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
+                                {u.role === 'ADMIN' ? 'Директор' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'SUPPLY' ? 'Снабжение' : u.role === 'WAREHOUSE' ? 'Кладовщик' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
                               </span>
                             </td>
                             <td style={{ padding: '10px' }}>
@@ -1924,7 +1924,7 @@ export default function Home() {
             <option value="">-- Выберите сотрудника --</option>
             {users.filter(u => u.isActive).map(u => (
               <option key={u.id} value={u.phone}>
-                {u.name} ({u.title || (u.role === 'ADMIN' ? 'ГИП' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик')})
+                {u.name} ({u.title || (u.role === 'ADMIN' ? 'Директор' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик')})
               </option>
             ))}
           </select>
@@ -2126,7 +2126,7 @@ export default function Home() {
                   onChange={(e) => setEditUserRole(e.target.value)}
                   required
                 >
-                  <option value="ADMIN">ГИП / Администратор</option>
+                  <option value="ADMIN">Директор / Администратор</option>
                   <option value="MANAGER">Руководитель</option>
                   <option value="ACCOUNTANT">Бухгалтер</option>
                   <option value="SUPPLY">Снабжение / Закупщик</option>

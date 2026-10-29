@@ -81,7 +81,7 @@ export async function POST(request: Request) {
         (numAmount > 0 ? `*Ориентировочная сумма:* ${numAmount.toLocaleString('ru-RU')} ₸\n` : '') +
         `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
         `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Сотрудник'}\n\n` +
-        `⏳ Требуется первичное согласование потребности ГИПом/Руководителем.`;
+        `⏳ Требуется первичное согласование потребности Директором/Руководителем.`;
 
       const initialKeyboard = {
         inline_keyboard: [
@@ -210,7 +210,7 @@ export async function PATCH(request: Request) {
           }
         }
 
-        // 2. Снабженец нашел поставщика и выставил счет -> Уведомляем ГИПа/Админа на утверждение счета
+        // 2. Снабженец нашел поставщика и выставил счет -> Уведомляем Директора на утверждение счета
         if (status === 'PENDING_PAYMENT_APPROVAL') {
           const admins = await prisma.user.findMany({
             where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
@@ -239,7 +239,7 @@ export async function PATCH(request: Request) {
           }
         }
 
-        // 3. ГИП утвердил счет -> Уведомляем Бухгалтерию
+        // 3. Директор утвердил счет -> Уведомляем Бухгалтерию
         if (status === 'APPROVED_FOR_PAYMENT') {
           const accountants = await prisma.user.findMany({
             where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }

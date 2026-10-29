@@ -221,7 +221,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     switch (status) {
       case 'PENDING_APPROVAL':
       case 'PENDING':
-        text = '1. ЖДЕТ ГИПа';
+        text = '1. ЖДЕТ ДИРЕКТОРА';
         bg = 'rgba(245, 158, 11, 0.2)';
         color = '#f59e0b';
         break;
@@ -231,7 +231,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         color = '#3b82f6';
         break;
       case 'PENDING_PAYMENT_APPROVAL':
-        text = '3. СЧЕТ ГОТОВ (ЖДЕТ ГИПа)';
+        text = '3. СЧЕТ ГОТОВ (ЖДЕТ ДИРЕКТОРА)';
         bg = 'rgba(168, 85, 247, 0.2)';
         color = '#c084fc';
         break;
@@ -253,7 +253,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         color = '#2dd4bf';
         break;
       case 'PENDING_EXPENSE':
-        text = 'ПОДОТЧЕТ (ЖДЕТ ГИПа)';
+        text = 'ПОДОТЧЕТ (ЖДЕТ ДИРЕКТОРА)';
         bg = 'rgba(245, 158, 11, 0.2)';
         color = '#f59e0b';
         break;
@@ -438,7 +438,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             className="inline-btn" 
             style={{ background: statusFilter === 'PENDING_GIP' ? '#f59e0b' : 'rgba(255,255,255,0.05)', color: '#fff' }}
           >
-            ⏳ Ждут ГИПа
+            ⏳ Ждут Директора
           </button>
           
           <button 
@@ -867,7 +867,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                     onClick={() => handleSupplyModalSubmit('PENDING_PAYMENT_APPROVAL')}
                     style={{ background: '#10b981', color: '#fff' }}
                   >
-                    🚀 Отправить ГИПу на утверждение
+                    🚀 Отправить Директору на утверждение
                   </button>
                 </div>
               </div>

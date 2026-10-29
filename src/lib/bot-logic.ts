@@ -40,7 +40,7 @@ async function notifyManagersAboutBlocker(
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ae-project-manager-nu.vercel.app';
     const alertMessage =
-      `🚨 *ВНИМАНИЕ, ГИП! ОБНАРУЖЕН БЛОКЕР*\n\n` +
+      `🚨 *ВНИМАНИЕ, ДИРЕКТОР! ОБНАРУЖЕН БЛОКЕР*\n\n` +
       `• Объект: *${project.name}*\n` +
       `• Раздел / Задача: *${task.name}*\n` +
       `• Исполнитель: *${user.name}* (${user.role})\n` +
@@ -178,7 +178,7 @@ export async function handleIncomingBotMessage(
           replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
             `*Проект:* ${project.name}\n` +
             `*Файл:* ${fileContext.fileName || 'Спецификация'}\n\n` +
-            `⏳ Заявка передана ГИПу на первичное согласование потребности.`
+            `⏳ Заявка передана Директору на первичное согласование потребности.`
         };
       }
     }
@@ -243,7 +243,7 @@ export async function handleIncomingBotMessage(
           }
 
           return {
-            replyText: `✅ Счет успешно прикреплен к заявке *#${pur.id}* и отправлен ГИПу на утверждение!`
+            replyText: `✅ Счет успешно прикреплен к заявке *#${pur.id}* и отправлен Директору на утверждение!`
           };
         }
       }
@@ -270,7 +270,7 @@ export async function handleIncomingBotMessage(
 
     if (forwardedCount > 0) {
       return {
-        replyText: `✅ Файл успешно получен и переслан руководству (ГИП).`,
+        replyText: `✅ Файл успешно получен и переслан руководству (Директор).`,
       };
     } else {
       return {
@@ -405,7 +405,7 @@ export async function handleIncomingBotMessage(
           replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
             `*Проект:* ${project.name}\n` +
             `*Потребность:* ${cleanText}\n\n` +
-            `⏳ Заявка передана ГИПу на первичное согласование потребности.`
+            `⏳ Заявка передана Директору на первичное согласование потребности.`
         };
       }
     }
@@ -507,7 +507,7 @@ export async function handleIncomingBotMessage(
       const supplyUsers = await prisma.user.findMany({
         where: { role: 'SUPPLY', telegramId: { not: null } }
       });
-      const sMsg = `📦 *Заявка #${pur.id} разрешена ГИПом в снабжение!*\n\n` +
+      const sMsg = `📦 *Заявка #${pur.id} разрешена Директором в снабжение!*\n\n` +
         `*Проект:* ${pur.project.name}\n` +
         `*Потребность:* ${pur.title}\n` +
         `*Заявитель:* ${pur.requester?.name}\n\n` +
@@ -892,7 +892,7 @@ export async function handleIncomingBotMessage(
       // Send Instant Push Alert to GIP / Managers
       await notifyManagersAboutBlocker(targetTask.project, targetTask, user, alertReason);
 
-      replyText += `\n🚨 *ГИП и руководство получили мгновенное уведомление в Telegram.*`;
+      replyText += `\n🚨 *Директор и руководство получили мгновенное уведомление в Telegram.*`;
     } else {
       // Resolve any active alerts
       await prisma.alert.updateMany({

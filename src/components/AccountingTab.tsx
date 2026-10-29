@@ -166,7 +166,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
   };
 
   if (currentUser?.role !== 'ADMIN') {
-    return <div style={{ color: 'var(--text-muted)' }}>Доступ к разделу Бухгалтерии есть только у ГИПа (Администратора).</div>;
+    return <div style={{ color: 'var(--text-muted)' }}>Доступ к разделу Бухгалтерии есть только у Директора (Администратора).</div>;
   }
 
   return (
