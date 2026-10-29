@@ -114,7 +114,76 @@ export async function handleIncomingBotMessage(
 
   // 1.5 Handle File Upload (Document/Photo)
   if (fileContext && messageId && chatId) {
-    // Check if this file is an invoice attached to a purchase request (e.g. caption has "#12" or "заявка 12")
+    // 1.5.1 Check if user has an active pending specification creation request (AWAITING_PURCHASE_SPEC)
+    const pendingSpecLog = await prisma.auditLog.findFirst({
+      where: {
+        userId: user.id,
+        action: 'AWAITING_PURCHASE_SPEC',
+        createdAt: { gte: new Date(Date.now() - 20 * 60 * 1000) } // valid for 20 mins
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (pendingSpecLog && pendingSpecLog.details) {
+      const projectId = Number(pendingSpecLog.details);
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (project) {
+        const { getTelegramFileUrl } = await import('./telegram');
+        const fileUrl = await getTelegramFileUrl(fileContext.fileId);
+        
+        const reqTitle = cleanText || fileContext.fileName || 'Спецификация комплектующих и материалов';
+        
+        const purchase = await prisma.purchaseRequest.create({
+          data: {
+            type: 'INVOICE',
+            title: reqTitle,
+            projectId: project.id,
+            requesterId: user.id,
+            fileUrl: fileUrl || null,
+            status: 'PENDING_APPROVAL',
+            amount: 0
+          },
+          include: { project: true, requester: true }
+        });
+
+        // Clear pending log
+        await prisma.auditLog.delete({ where: { id: pendingSpecLog.id } }).catch(() => {});
+
+        // Notify GIP/Admin
+        const admins = await prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
+        });
+
+        const notifyMsg = `🛒 *Новая заявка на закупку (со спецификацией)*\n\n` +
+          `*Проект:* ${project.name}\n` +
+          `*Инициатор:* ${user.name} (${user.role})\n` +
+          `*Описание:* ${reqTitle}\n` +
+          (fileUrl ? `📎 [Открыть спецификацию](${fileUrl})\n\n` : `\n`) +
+          `👉 Разрешить закупку в снабжение?`;
+
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Разрешить в снабжение', callback_data: `pur_approve_need_${purchase.id}` },
+              { text: '❌ Отклонить', callback_data: `pur_reject_${purchase.id}` }
+            ]
+          ]
+        };
+
+        for (const admin of admins) {
+          if (admin.telegramId) await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
+        }
+
+        return {
+          replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
+            `*Проект:* ${project.name}\n` +
+            `*Файл:* ${fileContext.fileName || 'Спецификация'}\n\n` +
+            `⏳ Заявка передана ГИПу на первичное согласование потребности.`
+        };
+      }
+    }
+
+    // 1.5.2 Check if this file is an invoice attached to a purchase request (e.g. caption has "#12" or "заявка 12")
     const purchaseMatch = cleanText.match(/(?:#|заявк[аи]\s*)(\d+)/i);
     if (purchaseMatch && fileContext.fileId) {
       const purId = Number(purchaseMatch[1]);
@@ -207,6 +276,138 @@ export async function handleIncomingBotMessage(
       return {
         replyText: `✅ Файл получен. (Обратите внимание: в системе сейчас нет активных администраторов с привязанным Telegram).`,
       };
+    }
+  }
+
+  // 1.7 Handle /cancel command
+  if (cleanText === '/cancel' || cleanText === 'pur_cancel') {
+    await prisma.auditLog.deleteMany({
+      where: { userId: user.id, action: { in: ['AWAITING_PURCHASE_SPEC', 'PENDING_PIN_APPROVAL'] } }
+    }).catch(() => {});
+
+    return {
+      replyText: 'Операция отменена. Чем еще могу помочь?'
+    };
+  }
+
+  // 1.7.5 Handle /purchase or "🛒 Заявка на закупку"
+  if (
+    cleanText === '/purchase' || 
+    cleanText === '🛒 Заявка на закупку' || 
+    cleanText.toLowerCase() === 'закупка' || 
+    cleanText.toLowerCase() === 'заявка' ||
+    cleanText === 'pur_new_request'
+  ) {
+    const activeProjects = await prisma.project.findMany({
+      where: { status: { not: 'DONE' } },
+      orderBy: { updatedAt: 'desc' },
+      take: 12
+    });
+
+    if (activeProjects.length === 0) {
+      return {
+        replyText: 'В системе пока нет активных проектов для создания заявки на закупку.'
+      };
+    }
+
+    const inline_keyboard = activeProjects.map(p => [
+      { text: `📁 ${p.name}`, callback_data: `pur_select_proj_${p.id}` }
+    ]);
+
+    inline_keyboard.push([{ text: '❌ Отмена', callback_data: 'pur_cancel' }]);
+
+    return {
+      replyText: `🛒 *Создание заявки на закупку ТМЦ*\n\nВыберите проект, для которого требуются материалы или оборудование:`,
+      keyboard: { inline_keyboard }
+    };
+  }
+
+  // 1.7.6 Handle Project Selection for Purchase: pur_select_proj_(\d+)
+  const purSelectProjMatch = cleanText.match(/^pur_select_proj_(\d+)$/);
+  if (purSelectProjMatch) {
+    const projectId = Number(purSelectProjMatch[1]);
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) return { replyText: '⚠️ Проект не найден.' };
+
+    await prisma.auditLog.deleteMany({
+      where: { userId: user.id, action: 'AWAITING_PURCHASE_SPEC' }
+    }).catch(() => {});
+
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'AWAITING_PURCHASE_SPEC',
+        details: String(project.id)
+      }
+    });
+
+    return {
+      replyText: `📁 Выбран проект: *${project.name}*\n\n` +
+        `📎 Теперь *отправьте файл спецификации* (Excel, PDF, Word, фото перечня с цеха) или просто *напишите списком в сообщении*, что именно необходимо закупить:\n\n` +
+        `_(Для отмены отправьте /cancel)_`
+    };
+  }
+
+  // 1.7.7 Check if user is typing text specification for pending purchase request
+  if (cleanText && cleanText !== '/cancel' && cleanText !== 'pur_cancel' && !cleanText.startsWith('/') && !/^\d{4}$/.test(cleanText)) {
+    const pendingSpecLog = await prisma.auditLog.findFirst({
+      where: {
+        userId: user.id,
+        action: 'AWAITING_PURCHASE_SPEC',
+        createdAt: { gte: new Date(Date.now() - 20 * 60 * 1000) }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (pendingSpecLog && pendingSpecLog.details) {
+      const projectId = Number(pendingSpecLog.details);
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (project) {
+        const purchase = await prisma.purchaseRequest.create({
+          data: {
+            type: 'INVOICE',
+            title: cleanText,
+            projectId: project.id,
+            requesterId: user.id,
+            status: 'PENDING_APPROVAL',
+            amount: 0
+          },
+          include: { project: true, requester: true }
+        });
+
+        await prisma.auditLog.delete({ where: { id: pendingSpecLog.id } }).catch(() => {});
+
+        // Notify GIP/Admin
+        const admins = await prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
+        });
+
+        const notifyMsg = `🛒 *Новая заявка на закупку*\n\n` +
+          `*Проект:* ${project.name}\n` +
+          `*Инициатор:* ${user.name} (${user.role})\n` +
+          `*Потребность:* ${cleanText}\n\n` +
+          `👉 Разрешить закупку в снабжение?`;
+
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Разрешить в снабжение', callback_data: `pur_approve_need_${purchase.id}` },
+              { text: '❌ Отклонить', callback_data: `pur_reject_${purchase.id}` }
+            ]
+          ]
+        };
+
+        for (const admin of admins) {
+          if (admin.telegramId) await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
+        }
+
+        return {
+          replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
+            `*Проект:* ${project.name}\n` +
+            `*Потребность:* ${cleanText}\n\n` +
+            `⏳ Заявка передана ГИПу на первичное согласование потребности.`
+        };
+      }
     }
   }
 
@@ -557,9 +758,16 @@ export async function handleIncomingBotMessage(
       replyText:
         `👋 Здравствуйте, *${user.name}*!\n\n` +
         `Вы авторизованы в системе как *${user.role}* (${user.title || 'Специалист'}).\n\n` +
-        `📌 *Команды бота:*\n` +
-        `• \`/tasks\` — список ваших активных задач с кнопками переключения статусов\n` +
-        `• *Текстовый отчет* — просто напишите своими словами, что сделано или что мешает работе (ИИ сам обновит статус и при необходимости уведомит ГИПа).`,
+        `📌 *Быстрые действия:*\n` +
+        `• Нажмите кнопку *«🛒 Заявка на закупку»*, чтобы выбрать проект и отправить спецификацию (Excel, PDF, фото);\n` +
+        `• Нажмите *«📋 Мои задачи»* (\`/tasks\`), чтобы посмотреть текущие задачи;\n` +
+        `• Или просто напишите текстовый отчет своими словами о статусе работ.`,
+      keyboard: {
+        keyboard: [
+          [{ text: '🛒 Заявка на закупку' }, { text: '📋 Мои задачи' }]
+        ],
+        resize_keyboard: true,
+      }
     };
   }
 
