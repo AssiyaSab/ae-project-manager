@@ -200,3 +200,30 @@ export async function getTelegramWebhookInfo() {
   const response = await fetch(`${TELEGRAM_API_BASE}${token}/getWebhookInfo`);
   return await response.json();
 }
+
+export async function setTelegramBotCommands() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not defined');
+
+  try {
+    const response = await fetch(`${TELEGRAM_API_BASE}${token}/setMyCommands`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        commands: [
+          { command: 'start', description: '🔄 Главное меню / Перезапуск' },
+          { command: 'purchase', description: '📝 Подать заявку на закупку' },
+          { command: 'trip', description: '✈️ Заявка на командировку' },
+          { command: 'tasks', description: '📋 Мои активные задачи' },
+          { command: 'tools', description: '🛠 Мой инструмент' },
+        ],
+      }),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('❌ Failed to call Telegram setMyCommands:', error);
+    return null;
+  }
+}

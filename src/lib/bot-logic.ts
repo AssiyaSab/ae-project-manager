@@ -14,9 +14,11 @@ export interface BotResponse {
 const defaultUserKeyboard = {
   keyboard: [
     [{ text: '📝 Подать заявку на закупку' }, { text: '✈️ Заявка на командировку' }],
-    [{ text: '📋 Мои задачи' }, { text: '🛠 Мой инструмент' }]
+    [{ text: '📋 Мои задачи' }, { text: '🛠 Мой инструмент' }],
+    [{ text: '🔄 Главное меню (/start)' }]
   ],
   resize_keyboard: true,
+  is_persistent: true,
 };
 
 function parseDateRange(dateStr: string) {
@@ -1472,7 +1474,15 @@ export async function handleIncomingBotMessage(
   // =========================================================================
   // 4. Command "/start", "Привет", "/help"
   // =========================================================================
-  if (cleanText === '/start' || cleanText.toLowerCase() === 'привет' || cleanText === '/help') {
+  if (
+    cleanText === '/start' || 
+    cleanText === '🔄 Главное меню (/start)' || 
+    cleanText === '🔄 Главное меню' || 
+    cleanText === 'Главное меню' || 
+    cleanText.toLowerCase() === 'меню' || 
+    cleanText.toLowerCase() === 'привет' || 
+    cleanText === '/help'
+  ) {
     return {
       replyText:
         `👋 Здравствуйте, *${user.name}*!\n\n` +

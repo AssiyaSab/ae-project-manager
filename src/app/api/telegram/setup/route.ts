@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { setTelegramWebhook, getTelegramWebhookInfo } from '@/lib/telegram';
+import { setTelegramWebhook, getTelegramWebhookInfo, setTelegramBotCommands } from '@/lib/telegram';
 
 export async function GET(req: NextRequest) {
   try {
@@ -26,16 +26,20 @@ export async function GET(req: NextRequest) {
     // 1. Set the webhook
     const setResult = await setTelegramWebhook(webhookUrl);
 
-    // 2. Query the updated webhook info
+    // 2. Set permanent bot commands (Menu button)
+    const commandsResult = await setTelegramBotCommands();
+
+    // 3. Query the updated webhook info
     const infoResult = await getTelegramWebhookInfo();
 
     return NextResponse.json({
       success: setResult.ok,
       configuredUrl: webhookUrl,
       setWebhookResponse: setResult,
+      commandsResult: commandsResult,
       currentWebhookInfo: infoResult,
       message: setResult.ok
-        ? '✅ Telegram Webhook successfully connected to Vercel!'
+        ? '✅ Telegram Webhook and Commands Menu successfully configured!'
         : '❌ Failed to set Telegram Webhook.',
     });
   } catch (error) {
