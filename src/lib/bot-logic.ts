@@ -240,6 +240,150 @@ export async function handleIncomingBotMessage(
       }
     }
 
+    // 1.5.0.1 Supply Invoice File Upload (SUPPLY_WIZ_FILE)
+    const supplyWizFileLog = await prisma.auditLog.findFirst({
+      where: {
+        userId: user.id,
+        action: 'SUPPLY_WIZ_FILE',
+        createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (supplyWizFileLog && supplyWizFileLog.details) {
+      try {
+        const data = JSON.parse(supplyWizFileLog.details);
+        const updated = await prisma.purchaseRequest.update({
+          where: { id: Number(data.purchaseId) },
+          data: {
+            amount: Number(data.amount) || 0,
+            invoiceFileUrl: fileUrl,
+            status: 'PENDING_PAYMENT_APPROVAL',
+            supplyUserId: user.id
+          },
+          include: { project: true, requester: true, supplyUser: true }
+        });
+
+        await prisma.auditLog.delete({ where: { id: supplyWizFileLog.id } }).catch(() => {});
+
+        // Notify Directors (ADMIN / MANAGER)
+        const admins = await prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
+        });
+
+        const dirMsg = `📑 *Счет поставщика прикреплен и ожидает согласования*\n\n` +
+          `• *Заявка:* #${updated.id}\n` +
+          `• *Проект:* ${updated.project.name}\n` +
+          `• *ТМЦ:* ${updated.title}\n` +
+          `• *Снабженец:* ${user.name}\n` +
+          `• *Итоговая сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n\n` +
+          (fileUrl ? `📎 [Открыть прикрепленный счет поставщика](${fileUrl})\n\n` : '') +
+          `👉 Выберите действие для согласования счета:`;
+
+        const dirKeyboard = {
+          inline_keyboard: [
+            [
+              { text: 'Одобрить к оплате ✅', callback_data: `pur_approve_inv_${updated.id}` },
+              { text: 'Вернуть на пересогласование 🔄', callback_data: `pur_renegotiate_${updated.id}` }
+            ]
+          ]
+        };
+
+        for (const admin of admins) {
+          if (admin.telegramId) {
+            await sendTelegramMessage(admin.telegramId, dirMsg, { parse_mode: 'Markdown', reply_markup: dirKeyboard });
+          }
+        }
+
+        return {
+          replyText: `✅ *Счет по заявке #${updated.id} успешно прикреплен!*\n\n` +
+            `• *Сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n` +
+            `• *Документ:* [Открыть счет](${fileUrl})\n` +
+            `• *Статус:* Передано Директору на утверждение к оплате\n\n` +
+            `⏳ Руководству направлено сообщение с кнопками [ Одобрить к оплате ✅ ] и [ Вернуть на пересогласование 🔄 ].`,
+          keyboard: defaultUserKeyboard,
+        };
+      } catch (err) {
+        console.error('Error handling SUPPLY_WIZ_FILE:', err);
+      }
+    }
+
+    // 1.5.0.2 Accountant POA File Upload (ACC_WIZ_POA_FILE)
+    const accWizPoaFileLog = await prisma.auditLog.findFirst({
+      where: {
+        userId: user.id,
+        action: 'ACC_WIZ_POA_FILE',
+        createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (accWizPoaFileLog && accWizPoaFileLog.details) {
+      try {
+        const data = JSON.parse(accWizPoaFileLog.details);
+        const updated = await prisma.purchaseRequest.update({
+          where: { id: Number(data.purchaseId) },
+          data: {
+            poaNumber: data.poaNumber || 'б/н',
+            poaDate: data.poaDate ? new Date(data.poaDate) : new Date(),
+            poaIssuedTo: data.poaIssuedTo || 'Сотрудник',
+            poaFileUrl: fileUrl,
+            status: 'POA_ISSUED'
+          },
+          include: { project: true, requester: true, supplyUser: true }
+        });
+
+        await prisma.auditLog.delete({ where: { id: accWizPoaFileLog.id } }).catch(() => {});
+
+        // Notify Supply users
+        const supplyUsers = await prisma.user.findMany({
+          where: { role: { in: ['SUPPLY', 'ADMIN'] }, telegramId: { not: null } }
+        });
+
+        const poaDateStr = updated.poaDate ? formatDate(updated.poaDate) : '';
+        const sMsg = `📜 *Готова доверенность на получение ТМЦ!*\n\n` +
+          `• *Заявка:* #${updated.id}\n` +
+          `• *Проект:* ${updated.project.name}\n` +
+          `• *ТМЦ:* ${updated.title}\n` +
+          `• *Поставщик:* ${updated.supplierName || 'Поставщик'}\n` +
+          `• *Доверенность:* №${updated.poaNumber} ${poaDateStr ? `от ${poaDateStr}` : ''}\n` +
+          `• *Выдана на:* ${updated.poaIssuedTo}\n\n` +
+          (fileUrl ? `📎 [Скачать скан доверенности Д-1](${fileUrl})\n\n` : '') +
+          `👉 Заберите товар у поставщика по доверенности и подтвердите:`;
+
+        const sKeyboard = {
+          inline_keyboard: [
+            [{ text: '🚚 Товар получен / Везем на склад', callback_data: `pur_intransit_${updated.id}` }]
+          ]
+        };
+
+        for (const sUser of supplyUsers) {
+          if (sUser.telegramId) {
+            await sendTelegramMessage(sUser.telegramId, sMsg, { parse_mode: 'Markdown', reply_markup: sKeyboard });
+          }
+        }
+
+        if (updated.requester?.telegramId) {
+          await sendTelegramMessage(
+            updated.requester.telegramId,
+            `📜 По вашей заявке *#${updated.id}* (${updated.title}) бухгалтерия оформила доверенность Д-1 №${updated.poaNumber}.`
+          );
+        }
+
+        return {
+          replyText: `✅ *Доверенность по заявке #${updated.id} успешно сохранена!*\n\n` +
+            `• *Номер:* №${updated.poaNumber}\n` +
+            `• *Выдана на:* ${updated.poaIssuedTo}\n` +
+            `• *Скан:* [Открыть документ](${fileUrl})\n` +
+            `• *Статус:* ДОВЕРЕННОСТЬ Д-1 ВЫДАНА\n\n` +
+            `Снабженцу отправлено уведомление со ссылкой на скачивание скана доверенности.`,
+          keyboard: defaultUserKeyboard,
+        };
+      } catch (err) {
+        console.error('Error handling ACC_WIZ_POA_FILE:', err);
+      }
+    }
+
     // 1.5.1 Check if user has an active pending specification creation request (AWAITING_PURCHASE_SPEC)
     const pendingSpecLog = await prisma.auditLog.findFirst({
       where: {
@@ -404,6 +548,10 @@ export async function handleIncomingBotMessage(
             'PUR_WIZ_NAME', 
             'PUR_WIZ_AMOUNT', 
             'PUR_WIZ_PHOTO',
+            'SUPPLY_WIZ_AMOUNT',
+            'SUPPLY_WIZ_FILE',
+            'ACC_WIZ_POA_INFO',
+            'ACC_WIZ_POA_FILE',
             'TRIP_WIZ_DEST',
             'TRIP_WIZ_DATES',
             'TRIP_WIZ_BUDGET'
@@ -702,6 +850,120 @@ export async function handleIncomingBotMessage(
           keyboard: defaultUserKeyboard,
         };
       }
+    }
+  }
+
+  // =========================================================================
+  // 1.9.5 Supply Invoice Wizard - Step 1: Amount input
+  // =========================================================================
+  const supplyWizAmtLog = await prisma.auditLog.findFirst({
+    where: {
+      userId: user.id,
+      action: 'SUPPLY_WIZ_AMOUNT',
+      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (supplyWizAmtLog && supplyWizAmtLog.details && !cleanText.startsWith('/') && !cleanText.startsWith('pur_') && !cleanText.startsWith('attach_') && !cleanText.startsWith('trip_')) {
+    try {
+      const data = JSON.parse(supplyWizAmtLog.details);
+      const numMatch = cleanText.replace(/\s/g, '').match(/\d+/);
+      const amount = numMatch ? Number(numMatch[0]) : 0;
+
+      if (amount <= 0) {
+        return {
+          replyText: `⚠️ Пожалуйста, введите корректную сумму по счету числом (например: \`185000\`):\n\n_(Для отмены отправьте /cancel)_`
+        };
+      }
+
+      await prisma.auditLog.delete({ where: { id: supplyWizAmtLog.id } }).catch(() => {});
+
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'SUPPLY_WIZ_FILE',
+          details: JSON.stringify({ purchaseId: data.purchaseId, amount })
+        }
+      });
+
+      return {
+        replyText: `💰 Сумма счета зафиксирована: *${amount.toLocaleString('ru-RU')} ₸*\n\n` +
+          `👉 *Шаг 2 из 2:* Теперь отправьте *файл документа (PDF) или четкое фото счета* поставщика в этот чат:\n\n` +
+          `_(Для отмены отправьте /cancel)_`
+      };
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // =========================================================================
+  // 1.9.6 Accountant POA Wizard - Step 1: POA Details input
+  // =========================================================================
+  const accWizPoaLog = await prisma.auditLog.findFirst({
+    where: {
+      userId: user.id,
+      action: 'ACC_WIZ_POA_INFO',
+      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (accWizPoaLog && accWizPoaLog.details && !cleanText.startsWith('/') && !cleanText.startsWith('pur_') && !cleanText.startsWith('attach_') && !cleanText.startsWith('trip_')) {
+    try {
+      const data = JSON.parse(accWizPoaLog.details);
+
+      // Extract number: e.g. № 14, №14/2, 14
+      const numMatch = cleanText.match(/(?:№|номер)?\s*([0-9А-Яа-яA-Za-z\/-]+)/i);
+      const poaNumber = numMatch ? numMatch[1].replace(/№/g, '').trim() : cleanText.substring(0, 20).trim();
+
+      // Extract date (e.g. 02.11.2026 or 02/11/2026)
+      const dateMatch = cleanText.match(/(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?/);
+      let poaDateIso = new Date().toISOString();
+      if (dateMatch) {
+        const day = parseInt(dateMatch[1], 10);
+        const month = parseInt(dateMatch[2], 10) - 1;
+        let yr = dateMatch[3] ? parseInt(dateMatch[3], 10) : new Date().getFullYear();
+        if (yr < 100) yr += 2000;
+        const parsed = new Date(yr, month, day);
+        if (!isNaN(parsed.getTime())) poaDateIso = parsed.toISOString();
+      }
+
+      // Extract name if provided
+      let poaIssuedTo = '';
+      if (cleanText.includes(',')) {
+        poaIssuedTo = cleanText.split(',').slice(1).join(',').trim();
+      } else if (/на\s+([А-Яа-яЁё\s]+)/i.test(cleanText)) {
+        const nameMatch = cleanText.match(/на\s+([А-Яа-яЁё\s]+)/i);
+        if (nameMatch) poaIssuedTo = nameMatch[1].trim();
+      }
+      if (!poaIssuedTo) poaIssuedTo = 'Сотрудник снабжения';
+
+      await prisma.auditLog.delete({ where: { id: accWizPoaLog.id } }).catch(() => {});
+
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'ACC_WIZ_POA_FILE',
+          details: JSON.stringify({
+            purchaseId: data.purchaseId,
+            poaNumber,
+            poaDate: poaDateIso,
+            poaIssuedTo
+          })
+        }
+      });
+
+      return {
+        replyText: `📜 Реквизиты доверенности приняты:\n` +
+          `• *Номер:* №${poaNumber}\n` +
+          `• *Дата:* ${formatDate(poaDateIso)}\n` +
+          `• *Выдана на:* ${poaIssuedTo}\n\n` +
+          `👉 *Шаг 2 из 2:* Теперь отправьте *скан или фото доверенности формы Д-1* (PDF или фото) в этот чат:\n\n` +
+          `_(Для отмены отправьте /cancel)_`
+      };
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -1064,7 +1326,7 @@ export async function handleIncomingBotMessage(
   }
 
   // =========================================================================
-  // 1.13 Procurement & Logistics Callbacks (pur_approve_need_, pur_reject_, pur_intransit_, pur_delivered_)
+  // 1.13 Procurement & Logistics Callbacks (pur_approve_need_, pur_reject_, pur_intransit_, pur_delivered_, attach_invoice_, attach_poa_, pur_renegotiate_)
   // =========================================================================
   const purApproveNeedMatch = cleanText.match(/^pur_approve_need_(\d+)$/);
   const purRejectMatch = cleanText.match(/^pur_reject_(\d+)$/);
@@ -1072,8 +1334,133 @@ export async function handleIncomingBotMessage(
   const purPayInvMatch = cleanText.match(/^pur_pay_inv_(\d+)$/);
   const purInTransitMatch = cleanText.match(/^pur_intransit_(\d+)$/);
   const purDeliveredMatch = cleanText.match(/^pur_delivered_(\d+)$/);
+  const attachInvoiceMatch = cleanText.match(/^attach_invoice_(\d+)$/);
+  const purRenegotiateMatch = cleanText.match(/^pur_renegotiate_(\d+)$/);
+  const attachPoaMatch = cleanText.match(/^attach_poa_(\d+)$/);
 
-  if (purApproveNeedMatch || purRejectMatch || purApproveInvMatch || purPayInvMatch || purInTransitMatch || purDeliveredMatch) {
+  if (
+    purApproveNeedMatch || 
+    purRejectMatch || 
+    purApproveInvMatch || 
+    purPayInvMatch || 
+    purInTransitMatch || 
+    purDeliveredMatch ||
+    attachInvoiceMatch ||
+    purRenegotiateMatch ||
+    attachPoaMatch
+  ) {
+    // 0.1 ATTACH INVOICE (Supply starts invoice upload dialog)
+    if (attachInvoiceMatch) {
+      const purId = Number(attachInvoiceMatch[1]);
+      const pur = await prisma.purchaseRequest.findUnique({
+        where: { id: purId },
+        include: { project: true }
+      });
+      if (!pur) return { replyText: '⚠️ Заявка не найдена.' };
+
+      await prisma.auditLog.deleteMany({
+        where: { userId: user.id, action: { in: ['SUPPLY_WIZ_AMOUNT', 'SUPPLY_WIZ_FILE', 'ACC_WIZ_POA_INFO', 'ACC_WIZ_POA_FILE'] } }
+      }).catch(() => {});
+
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'SUPPLY_WIZ_AMOUNT',
+          details: JSON.stringify({ purchaseId: pur.id, purchaseTitle: pur.title, projectName: pur.project.name })
+        }
+      });
+
+      return {
+        replyText: `📝 *Внесение счета поставщика по заявке #${pur.id}*\n\n` +
+          `• *Проект:* ${pur.project.name}\n` +
+          `• *ТМЦ:* ${pur.title}\n\n` +
+          `👉 *Шаг 1 из 2:* Введите итоговую сумму по выставленному счету в тенге (числом, например: \`185000\`):\n\n` +
+          `_(Для отмены отправьте /cancel)_`
+      };
+    }
+
+    // 0.2 DIRECTOR RENEGOTIATE (Returns invoice to Supply)
+    if (purRenegotiateMatch) {
+      if (!['ADMIN', 'MANAGER'].includes(user.role)) {
+        return { replyText: '⚠️ У вас нет прав для возврата заявок.' };
+      }
+      const purId = Number(purRenegotiateMatch[1]);
+      const pur = await prisma.purchaseRequest.update({
+        where: { id: purId },
+        data: { status: 'IN_PROCUREMENT' },
+        include: { project: true, requester: true, supplyUser: true }
+      });
+
+      if (messageId && chatId) {
+        await editTelegramMessageText(
+          chatId,
+          messageId,
+          `🔄 *Счет по заявке #${pur.id} возвращен на пересогласование*\n\n` +
+          `• Проект: ${pur.project.name}\n` +
+          `• ТМЦ: ${pur.title}\n` +
+          `• Сумма: ${pur.amount.toLocaleString('ru-RU')} ₸`
+        );
+      }
+
+      // Notify Supply
+      const supplyRecipients = [
+        pur.supplyUser?.telegramId,
+        ...(await prisma.user.findMany({ where: { role: 'SUPPLY', telegramId: { not: null } } })).map(u => u.telegramId)
+      ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+      const reMsg = `🔄 *Счет по заявке #${pur.id} возвращен Директором на пересогласование!*\n\n` +
+        `*Проект:* ${pur.project.name}\n` +
+        `*ТМЦ:* ${pur.title}\n` +
+        `*Предыдущая сумма:* ${pur.amount.toLocaleString('ru-RU')} ₸\n\n` +
+        `👉 Запросите лучшие условия / скидку у поставщика и прикрепите новый счет:`;
+
+      const reKeyboard = {
+        inline_keyboard: [
+          [{ text: '📎 Прикрепить новый счет', callback_data: `attach_invoice_${pur.id}` }]
+        ]
+      };
+
+      for (const sTgId of supplyRecipients) {
+        if (sTgId) await sendTelegramMessage(sTgId, reMsg, { parse_mode: 'Markdown', reply_markup: reKeyboard });
+      }
+
+      return {
+        replyText: `🔄 Счет по заявке *#${pur.id}* возвращен в снабжение на пересогласование цены.`,
+        keyboard: defaultUserKeyboard,
+      };
+    }
+
+    // 0.3 ATTACH POA (Accountant starts POA upload dialog)
+    if (attachPoaMatch) {
+      const purId = Number(attachPoaMatch[1]);
+      const pur = await prisma.purchaseRequest.findUnique({
+        where: { id: purId },
+        include: { project: true }
+      });
+      if (!pur) return { replyText: '⚠️ Заявка не найдена.' };
+
+      await prisma.auditLog.deleteMany({
+        where: { userId: user.id, action: { in: ['SUPPLY_WIZ_AMOUNT', 'SUPPLY_WIZ_FILE', 'ACC_WIZ_POA_INFO', 'ACC_WIZ_POA_FILE'] } }
+      }).catch(() => {});
+
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: 'ACC_WIZ_POA_INFO',
+          details: JSON.stringify({ purchaseId: pur.id, purchaseTitle: pur.title, projectName: pur.project.name })
+        }
+      });
+
+      return {
+        replyText: `📜 *Оформление доверенности формы Д-1 по заявке #${pur.id}*\n\n` +
+          `• *Проект:* ${pur.project.name}\n` +
+          `• *ТМЦ:* ${pur.title}\n\n` +
+          `👉 *Шаг 1 из 2:* Введите номер и дату доверенности, а также ФИО сотрудника (кому выдана).\n\n` +
+          `_Пример:_ \`№ 14 от 02.11.2026, Иванов А.С.\` или \`14, 02.11.2026\`:\n\n` +
+          `_(Для отмены отправьте /cancel)_`
+      };
+    }
+
     // 1. APPROVE NEED (Director / Admin)
     if (purApproveNeedMatch) {
       if (!['ADMIN', 'MANAGER'].includes(user.role)) {
@@ -1104,9 +1491,14 @@ export async function handleIncomingBotMessage(
         `*Проект:* ${pur.project.name}\n` +
         `*Потребность:* ${pur.title}\n` +
         `*Заявитель:* ${pur.requester?.name}\n\n` +
-        `👉 Запросите счет у поставщика и внесите условия в систему.`;
+        `👉 Запросите счет у поставщика и прикрепите его:`;
+      const sKeyboard = {
+        inline_keyboard: [
+          [{ text: '📎 Прикрепить счет поставщика', callback_data: `attach_invoice_${pur.id}` }]
+        ]
+      };
       for (const sUser of supplyUsers) {
-        if (sUser.telegramId) await sendTelegramMessage(sUser.telegramId, sMsg, { parse_mode: 'Markdown' });
+        if (sUser.telegramId) await sendTelegramMessage(sUser.telegramId, sMsg, { parse_mode: 'Markdown', reply_markup: sKeyboard });
       }
 
       return {
@@ -1255,8 +1647,12 @@ export async function handleIncomingBotMessage(
       }
 
       return {
-        replyText: `✅ Оплата счета по заявке *#${pur.id}* подтверждена! Теперь можно выдать доверенность во вкладке «Бухгалтерия».`,
-        keyboard: defaultUserKeyboard,
+        replyText: `✅ Оплата счета по заявке *#${pur.id}* подтверждена!\n\nНажмите кнопку ниже, чтобы прикрепить скан доверенности формы Д-1:`,
+        keyboard: {
+          inline_keyboard: [
+            [{ text: '📜 Прикрепить доверенность', callback_data: `attach_poa_${pur.id}` }]
+          ]
+        },
       };
     }
 

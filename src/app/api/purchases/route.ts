@@ -207,18 +207,27 @@ export async function PATCH(request: Request) {
     // Telegram-уведомления по цепочке жизненного цикла
     try {
       if (status && status !== currentPurchase.status) {
-        // 1. ГИП одобрил потребность -> Уведомляем Снабжение
+        // 1. ГИП / Директор одобрил потребность -> Уведомляем Снабжение
         if (status === 'IN_PROCUREMENT' || (currentPurchase.status === 'PENDING_APPROVAL' && status === 'APPROVED')) {
           const supplyUsers = await prisma.user.findMany({
-            where: { role: 'SUPPLY', telegramId: { not: null } }
+            where: { role: { in: ['SUPPLY', 'ADMIN'] }, telegramId: { not: null } }
           });
-          const msg = `📦 *Заявка передана в снабжение*\n\n` +
+          const msg = `📦 *Заявка #${updated.id} передана в снабжение*\n\n` +
             `*Проект:* ${updated.project?.name}\n` +
             `*Потребность:* ${updated.title}\n` +
-            `*Заявитель:* ${updated.requester?.name}\n\n` +
-            `👉 Требуется найти поставщика, запросить счет и внести коммерческие условия.`;
+            `*Заявитель:* ${updated.requester?.name || 'Сотрудник'}\n\n` +
+            `👉 Запросите счет у поставщика и прикрепите его:`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [
+                { text: '📎 Прикрепить счет поставщика', callback_data: `attach_invoice_${updated.id}` }
+              ]
+            ]
+          };
+
           for (const sUser of supplyUsers) {
-            if (sUser.telegramId) await sendTelegramMessage(sUser.telegramId, msg, { parse_mode: 'Markdown' });
+            if (sUser.telegramId) await sendTelegramMessage(sUser.telegramId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
           }
         }
 
@@ -277,8 +286,32 @@ export async function PATCH(request: Request) {
           }
         }
 
-        // 4. Оплачено -> Уведомляем Снабженца и Инженера
+        // 4. Оплачено -> Уведомляем Бухгалтерию (кнопка Прикрепить доверенность) и Снабженца
         if (status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') {
+          if (status === 'PAID_AND_ORDERED' || status === 'PAID') {
+            const accountants = await prisma.user.findMany({
+              where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+            });
+            const accMsg = `✅ *Счет по заявке #${updated.id} оплачен!*\n\n` +
+              `*Проект:* ${updated.project?.name}\n` +
+              `*ТМЦ:* ${updated.title}\n` +
+              `*Поставщик:* ${updated.supplierName || 'Поставщик'}\n` +
+              `*Сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n\n` +
+              `👉 Оформите и прикрепите скан доверенности формы Д-1:`;
+            
+            const accKeyboard = {
+              inline_keyboard: [
+                [
+                  { text: '📜 Прикрепить доверенность', callback_data: `attach_poa_${updated.id}` }
+                ]
+              ]
+            };
+
+            for (const acc of accountants) {
+              if (acc.telegramId) await sendTelegramMessage(acc.telegramId, accMsg, { parse_mode: 'Markdown', reply_markup: accKeyboard });
+            }
+          }
+
           const notifyRecipients = [updated.requester?.telegramId, updated.supplyUser?.telegramId].filter(Boolean);
           const msg = `✅ *Счет оплачен*\n\n` +
             `*Проект:* ${updated.project?.name}\n` +
