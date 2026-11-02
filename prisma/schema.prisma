@@ -102,6 +102,15 @@ model PurchaseRequest {
   // Данные оплаты и приемки
   paymentReceiptUrl   String?   // Платежка бухгалтера
   paidAt              DateTime?
+  
+  // Доверенность формы Д-1 на получение ТМЦ
+  poaNumber           String?   // Номер доверенности
+  poaDate             DateTime? // Дата выдачи доверенности
+  poaFileUrl          String?   // Скан / фото доверенности
+  poaIssuedTo         String?   // ФИО сотрудника, на чье имя выдана доверенность
+  
+  // Логистика и приемка
+  inTransitAt         DateTime? // Когда снабженец забрал товар / груз в пути
   deliveredAt         DateTime?
   receivedByUserId    Int?
   receivedByUser      User?     @relation("ReceivedBy", fields: [receivedByUserId], references: [id])
@@ -148,6 +157,8 @@ model ToolLog {
   issueDate         DateTime  @default(now())
   plannedReturnDate DateTime?
   actualReturnDate  DateTime?
+  status            String    @default("PENDING_ACCEPTANCE") // "PENDING_ACCEPTANCE" | "IN_USE" | "RETURNED" | "REJECTED"
+  acceptedAt        DateTime? // Время подтверждения приема инструмента сотрудником через Telegram
   condition         String?   // Состояние при возврате
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

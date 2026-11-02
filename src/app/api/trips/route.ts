@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { formatDate } from '@/lib/formatters';
 
@@ -72,11 +72,20 @@ export async function POST(request: Request) {
         `*Цель:* ${trip.purpose}\n` +
         `*Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)}\n` +
         `*Бюджет:* ${trip.budget.toLocaleString('ru-RU')} ₸\n\n` +
-        `Зайдите в панель управления для согласования.`;
+        `👉 Согласовать командировку?`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: 'Одобрить ✅', callback_data: `trip_approve_${trip.id}` },
+            { text: 'Отклонить ❌', callback_data: `trip_reject_${trip.id}` }
+          ]
+        ]
+      };
 
       for (const admin of admins) {
         if (admin.telegramId) {
-          await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown' });
+          await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
       }
     } catch (tgError) {

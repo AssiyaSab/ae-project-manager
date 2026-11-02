@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
     if (update.callback_query) {
       const cq = update.callback_query;
       const chatId = cq.message?.chat?.id?.toString();
+      const messageId = cq.message?.message_id?.toString();
       const telegramId = cq.from?.id?.toString();
       const username = cq.from?.username;
       const data = cq.data || '';
@@ -59,12 +60,18 @@ export async function POST(req: NextRequest) {
       if (chatId) {
         const response = await handleIncomingBotMessage(
           { telegramId, username },
-          data
+          data,
+          null,
+          messageId || null,
+          chatId
         );
 
-        await sendTelegramMessage(chatId, response.replyText, {
-          parse_mode: 'Markdown',
-        });
+        if (response.replyText) {
+          await sendTelegramMessage(chatId, response.replyText, {
+            parse_mode: 'Markdown',
+            reply_markup: response.keyboard,
+          });
+        }
       }
 
       if (cq.id) {

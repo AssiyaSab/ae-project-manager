@@ -1,4 +1,4 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +26,13 @@ export async function POST(request: Request) {
         employeeId: Number(employeeId),
         projectId: projectId ? Number(projectId) : null,
         plannedReturnDate: plannedReturnDate ? new Date(plannedReturnDate) : null,
+        status: 'PENDING_ACCEPTANCE',
       },
+      include: {
+        tool: true,
+        employee: true,
+        project: true,
+      }
     });
 
     // 2. Update Tool status
@@ -37,6 +43,34 @@ export async function POST(request: Request) {
         holderId: Number(employeeId)
       }
     });
+
+    // 3. Send Telegram confirmation request to employee
+    if (log.employee?.telegramId) {
+      try {
+        const { sendTelegramMessage } = await import('@/lib/telegram');
+        const projName = log.project?.name ? ` по проекту *${log.project.name}*` : '';
+        const serial = log.tool?.serialNumber ? ` (Инв. № *${log.tool.serialNumber}*)` : '';
+        const msg = `🛠 *Вам выдан инструмент:*\n\n` +
+          `• *${log.tool?.name}*${serial}${projName}\n\n` +
+          `Подтвердите получение:`;
+        
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Принял', callback_data: `tool_accept_${log.id}` },
+              { text: '❌ Не брал', callback_data: `tool_reject_${log.id}` }
+            ]
+          ]
+        };
+
+        await sendTelegramMessage(log.employee.telegramId, msg, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
+      } catch (tgErr) {
+        console.error('Failed to notify employee in Telegram about tool issue:', tgErr);
+      }
+    }
 
     return NextResponse.json(log);
   } catch (error) {

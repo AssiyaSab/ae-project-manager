@@ -243,12 +243,22 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         break;
       case 'PAID_AND_ORDERED':
       case 'PAID':
-        text = '5. ОПЛАЧЕНО / В ПУТИ';
+        text = '5. ОПЛАЧЕНО';
         bg = 'rgba(16, 185, 129, 0.2)';
         color = '#10b981';
         break;
+      case 'POA_ISSUED':
+        text = '5. ДОВЕРЕННОСТЬ Д-1 ВЫДАНА';
+        bg = 'rgba(139, 92, 246, 0.2)';
+        color = '#a78bfa';
+        break;
+      case 'IN_TRANSIT':
+        text = '6. ГРУЗ В ПУТИ / ВЕЗЕМ В ЦЕХ';
+        bg = 'rgba(59, 130, 246, 0.2)';
+        color = '#60a5fa';
+        break;
       case 'DELIVERED':
-        text = '6. ДОСТАВЛЕНО / НА СКЛАДЕ';
+        text = '7. ДОСТАВЛЕНО / НА СКЛАДЕ';
         bg = 'rgba(20, 184, 166, 0.2)';
         color = '#2dd4bf';
         break;
@@ -302,7 +312,8 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     if (statusFilter === 'SUPPLY') return ['IN_PROCUREMENT', 'APPROVED'].includes(p.status);
     if (statusFilter === 'GIP_INVOICE') return p.status === 'PENDING_PAYMENT_APPROVAL';
     if (statusFilter === 'ACCOUNTANT') return ['APPROVED_FOR_PAYMENT', 'APPROVED_EXPENSE'].includes(p.status);
-    if (statusFilter === 'IN_TRANSIT') return ['PAID_AND_ORDERED', 'PAID'].includes(p.status);
+    if (statusFilter === 'POA_ISSUED') return p.status === 'POA_ISSUED';
+    if (statusFilter === 'IN_TRANSIT') return ['IN_TRANSIT', 'POA_ISSUED', 'PAID_AND_ORDERED', 'PAID'].includes(p.status);
     if (statusFilter === 'DELIVERED') return p.status === 'DELIVERED';
     if (statusFilter === 'REJECTED') return p.status === 'REJECTED';
     return true;
@@ -466,11 +477,19 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
           </button>
 
           <button 
+            onClick={() => setStatusFilter('POA_ISSUED')} 
+            className="inline-btn" 
+            style={{ background: statusFilter === 'POA_ISSUED' ? '#8b5cf6' : 'rgba(255,255,255,0.05)', color: '#fff' }}
+          >
+            📜 Доверенность Д-1
+          </button>
+
+          <button 
             onClick={() => setStatusFilter('IN_TRANSIT')} 
             className="inline-btn" 
-            style={{ background: statusFilter === 'IN_TRANSIT' ? '#10b981' : 'rgba(255,255,255,0.05)', color: '#fff' }}
+            style={{ background: statusFilter === 'IN_TRANSIT' ? '#3b82f6' : 'rgba(255,255,255,0.05)', color: '#fff' }}
           >
-            🚚 Оплачено / В пути
+            🚚 В пути
           </button>
 
           <button 
@@ -478,7 +497,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             className="inline-btn" 
             style={{ background: statusFilter === 'DELIVERED' ? '#14b8a6' : 'rgba(255,255,255,0.05)', color: '#fff' }}
           >
-            ✅ Доставлено
+            ✅ На складе
           </button>
 
           {/* Type filter dropdown */}
@@ -565,6 +584,30 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                             «{p.supplyComment}»
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {/* POA (ДОВЕРЕННОСТЬ Д-1) INFO */}
+                    {p.poaNumber && (
+                      <div style={{ 
+                        marginTop: '8px', 
+                        padding: '8px 12px', 
+                        background: 'rgba(139, 92, 246, 0.08)', 
+                        border: '1px solid rgba(139, 92, 246, 0.25)', 
+                        borderRadius: '6px', 
+                        fontSize: '0.8rem' 
+                      }}>
+                        <div style={{ fontWeight: 600, color: '#c4b5fd' }}>
+                          📜 Доверенность Д-1 №{p.poaNumber} {p.poaDate ? `от ${formatDate(p.poaDate)}` : ''}
+                        </div>
+                        <div style={{ display: 'flex', gap: '15px', marginTop: '3px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                          {p.poaIssuedTo && <span>Выдана на: <strong>{p.poaIssuedTo}</strong></span>}
+                          {p.poaFileUrl && (
+                            <a href={p.poaFileUrl} target="_blank" rel="noreferrer" style={{ color: '#93c5fd', textDecoration: 'underline' }}>
+                              📥 Скан доверенности
+                            </a>
+                          )}
+                        </div>
                       </div>
                     )}
                   </td>
@@ -704,15 +747,27 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                         </button>
                       )}
 
-                      {/* 6. DELIVERY ARRIVAL ACTION */}
-                      {(p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isSupply || isWarehouse || isGipOrManager) && (
+                      {/* 6. SUPPLY: PICKED UP AT SUPPLIER / IN TRANSIT */}
+                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isSupply || isGipOrManager) && (
+                        <button 
+                          onClick={() => updatePurchaseStatus(p.id, 'IN_TRANSIT')} 
+                          className="inline-btn" 
+                          style={{ background: '#3b82f6', color: '#fff', fontWeight: 600 }}
+                          title="Товар получен у поставщика / Везем на склад"
+                        >
+                          🚚 Везем на склад
+                        </button>
+                      )}
+
+                      {/* 7. WAREHOUSE: RECEIVE AT WAREHOUSE */}
+                      {(p.status === 'IN_TRANSIT' || p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isWarehouse || isGipOrManager) && (
                         <button 
                           onClick={() => updatePurchaseStatus(p.id, 'DELIVERED')} 
                           className="inline-btn" 
-                          style={{ background: '#14b8a6', color: '#fff' }}
-                          title="Отметить прибытие ТМЦ на базу / объект"
+                          style={{ background: '#14b8a6', color: '#fff', fontWeight: 600 }}
+                          title="Кладовщик проверил и принял ТМЦ на склад"
                         >
-                          📦 Доставлено на склад
+                          📦 Принять на склад
                         </button>
                       )}
 

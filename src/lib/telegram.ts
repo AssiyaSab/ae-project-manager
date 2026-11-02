@@ -135,6 +135,45 @@ export async function getTelegramFileUrl(fileId: string): Promise<string | null>
   }
 }
 
+export async function editTelegramMessageText(
+  chatId: string | number,
+  messageId: string | number,
+  text: string,
+  options?: {
+    parse_mode?: 'Markdown' | 'HTML';
+    reply_markup?: any;
+  }
+) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return null;
+
+  try {
+    const payload: any = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text,
+      parse_mode: options?.parse_mode ?? 'Markdown',
+    };
+
+    if (options?.reply_markup !== undefined) {
+      payload.reply_markup = options.reply_markup;
+    }
+
+    const response = await fetch(`${TELEGRAM_API_BASE}${token}/editMessageText`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.error('❌ Failed to call Telegram editMessageText:', error);
+    return null;
+  }
+}
+
 export async function setTelegramWebhook(webhookUrl: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('TELEGRAM_BOT_TOKEN is not defined');

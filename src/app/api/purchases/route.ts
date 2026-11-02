@@ -130,7 +130,11 @@ export async function PATCH(request: Request) {
       plannedDeliveryDate,
       supplyComment,
       invoiceFileUrl,
-      paymentReceiptUrl
+      paymentReceiptUrl,
+      poaNumber,
+      poaDate,
+      poaFileUrl,
+      poaIssuedTo
     } = body;
     
     if (!id) {
@@ -171,6 +175,11 @@ export async function PATCH(request: Request) {
     if (invoiceFileUrl !== undefined) data.invoiceFileUrl = invoiceFileUrl;
     if (paymentReceiptUrl !== undefined) data.paymentReceiptUrl = paymentReceiptUrl;
 
+    if (poaNumber !== undefined) data.poaNumber = poaNumber;
+    if (poaDate !== undefined) data.poaDate = poaDate ? new Date(poaDate) : null;
+    if (poaFileUrl !== undefined) data.poaFileUrl = poaFileUrl;
+    if (poaIssuedTo !== undefined) data.poaIssuedTo = poaIssuedTo;
+
     // Автоматическая фиксация ответственных при смене статусов
     if (status === 'IN_PROCUREMENT') {
       data.supplyUserId = user.id || currentPurchase.supplyUserId;
@@ -180,6 +189,9 @@ export async function PATCH(request: Request) {
     }
     if (status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') {
       data.paidAt = new Date();
+    }
+    if (status === 'IN_TRANSIT') {
+      data.inTransitAt = new Date();
     }
     if (status === 'DELIVERED') {
       data.deliveredAt = new Date();
@@ -273,18 +285,67 @@ export async function PATCH(request: Request) {
             `*ТМЦ:* ${updated.title}\n` +
             `*Поставщик:* ${updated.supplierName || 'Поставщик'}\n` +
             `*Сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n\n` +
-            `🚚 Заказ запущен в доставку.`;
+            `⏳ Ожидается оформление доверенности формы Д-1 бухгалтерией.`;
           
-          const deliveryKeyboard = {
+          for (const tgId of notifyRecipients) {
+            if (tgId) await sendTelegramMessage(tgId, msg, { parse_mode: 'Markdown' });
+          }
+        }
+
+        // 4.5 Доверенность выдана (POA_ISSUED) -> Уведомляем Снабженца
+        if (status === 'POA_ISSUED') {
+          const supplyUsers = await prisma.user.findMany({
+            where: { role: { in: ['SUPPLY', 'ADMIN'] }, telegramId: { not: null } }
+          });
+          const poaDateStr = updated.poaDate ? new Date(updated.poaDate).toLocaleDateString('ru-RU') : '';
+          const msg = `📜 *Выдана доверенность на получение ТМЦ!*\n\n` +
+            `*Проект:* ${updated.project?.name}\n` +
+            `*Поставщик:* ${updated.supplierName || 'Поставщик'}\n` +
+            `*ТМЦ:* ${updated.title}\n` +
+            `*Доверенность:* №${updated.poaNumber || 'б/н'} ${poaDateStr ? `от ${poaDateStr}` : ''}\n` +
+            `*Выдана на:* ${updated.poaIssuedTo || 'Сотрудника'}\n` +
+            (updated.poaFileUrl ? `📎 [Скан доверенности Д-1](${updated.poaFileUrl})\n\n` : '\n') +
+            `👉 Заберите товар у поставщика и подтвердите статус доставки:`;
+
+          const keyboard = {
             inline_keyboard: [
               [
-                { text: '📦 Доставлено на склад', callback_data: `pur_delivered_${updated.id}` }
+                { text: '🚚 Товар получен / Везем на склад', callback_data: `pur_intransit_${updated.id}` }
               ]
             ]
           };
 
-          for (const tgId of notifyRecipients) {
-            if (tgId) await sendTelegramMessage(tgId, msg, { parse_mode: 'Markdown', reply_markup: deliveryKeyboard });
+          for (const sUser of supplyUsers) {
+            if (sUser.telegramId) {
+              await sendTelegramMessage(sUser.telegramId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+            }
+          }
+        }
+
+        // 4.6 Груз в пути (IN_TRANSIT) -> Уведомляем Склад
+        if (status === 'IN_TRANSIT') {
+          const warehouseUsers = await prisma.user.findMany({
+            where: { role: { in: ['WAREHOUSE', 'ADMIN'] }, telegramId: { not: null } }
+          });
+          const msg = `🚚 *Груз получен у поставщика и направляется на склад!*\n\n` +
+            `*Проект:* ${updated.project?.name}\n` +
+            `*ТМЦ:* ${updated.title}\n` +
+            `*Поставщик:* ${updated.supplierName || 'Поставщик'}\n` +
+            (updated.poaNumber ? `*По доверенности:* №${updated.poaNumber} (${updated.poaIssuedTo || ''})\n` : '') +
+            `\n👉 Кладовщику: после проверки и выгрузки нажмите:`;
+
+          const keyboard = {
+            inline_keyboard: [
+              [
+                { text: '📦 Принять на склад', callback_data: `pur_delivered_${updated.id}` }
+              ]
+            ]
+          };
+
+          for (const wh of warehouseUsers) {
+            if (wh.telegramId) {
+              await sendTelegramMessage(wh.telegramId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+            }
           }
         }
 
