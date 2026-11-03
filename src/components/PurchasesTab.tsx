@@ -322,7 +322,8 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const role = currentUser?.role;
   const isGipOrManager = ['ADMIN', 'MANAGER'].includes(role);
   const isSupply = ['SUPPLY', 'ADMIN'].includes(role);
-  const isAccountant = ['ACCOUNTANT', 'ADMIN'].includes(role);
+  const isChiefAccountant = currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || (currentUser?.role === 'ACCOUNTANT' && currentUser?.title?.toLowerCase().includes('главн'));
+  const isAccountant = ['ACCOUNTANT', 'CHIEF_ACCOUNTANT', 'ADMIN'].includes(role);
   const isWarehouse = ['WAREHOUSE', 'ADMIN'].includes(role);
 
   return (
@@ -703,16 +704,22 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                         </>
                       )}
 
-                      {/* 4. ACCOUNTANT PAYMENT ACTION */}
-                      {(p.status === 'APPROVED_FOR_PAYMENT' || p.status === 'APPROVED') && isAccountant && (
-                        <button 
-                          onClick={() => updatePurchaseStatus(p.id, 'PAID_AND_ORDERED')} 
-                          className="inline-btn" 
-                          style={{ background: '#10b981', color: '#fff' }}
-                          title="Подтвердить оплату счета"
-                        >
-                          💳 Оплачено
-                        </button>
+                      {/* 4. CHIEF ACCOUNTANT PAYMENT ACTION */}
+                      {(p.status === 'APPROVED_FOR_PAYMENT' || p.status === 'APPROVED') && (
+                        isChiefAccountant ? (
+                          <button 
+                            onClick={() => updatePurchaseStatus(p.id, 'PAID_AND_ORDERED')} 
+                            className="inline-btn" 
+                            style={{ background: '#10b981', color: '#fff', fontWeight: 600 }}
+                            title="Главный бухгалтер: подтвердить оплату счета"
+                          >
+                            💳 Оплачено
+                          </button>
+                        ) : isAccountant ? (
+                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>
+                            ⏳ Ждет оплаты Главбухом
+                          </span>
+                        ) : null
                       )}
 
                       {/* 5. EXPENSE APPROVAL & PAYMENT */}
@@ -736,15 +743,21 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                         </>
                       )}
 
-                      {p.status === 'APPROVED_EXPENSE' && isAccountant && (
-                        <button 
-                          onClick={() => updatePurchaseStatus(p.id, 'PAID_EXPENSE')} 
-                          className="inline-btn" 
-                          style={{ background: '#10b981', color: '#fff' }}
-                          title="Выплатить подотчет"
-                        >
-                          💳 Выплатить
-                        </button>
+                      {p.status === 'APPROVED_EXPENSE' && (
+                        isChiefAccountant ? (
+                          <button 
+                            onClick={() => updatePurchaseStatus(p.id, 'PAID_EXPENSE')} 
+                            className="inline-btn" 
+                            style={{ background: '#10b981', color: '#fff', fontWeight: 600 }}
+                            title="Главный бухгалтер: выплатить подотчет"
+                          >
+                            💳 Выплатить
+                          </button>
+                        ) : isAccountant ? (
+                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>
+                            ⏳ К выплате (Главбух)
+                          </span>
+                        ) : null
                       )}
 
                       {/* 6. SUPPLY: PICKED UP AT SUPPLIER / IN TRANSIT */}

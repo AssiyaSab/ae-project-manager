@@ -269,7 +269,7 @@ export default function ToolsTab({ currentUser, projects, users }: any) {
         </div>
       )}
 
-      {['ADMIN', 'MANAGER', 'WAREHOUSE', 'ACCOUNTANT'].includes(currentUser?.role) && (
+      {['ADMIN', 'MANAGER', 'WAREHOUSE', 'ACCOUNTANT', 'CHIEF_ACCOUNTANT'].includes(currentUser?.role) && (
         <div className="card">
           <h2 className="card-title">📦 Учет инструмента</h2>
           <div style={{ overflowX: 'auto' }}>

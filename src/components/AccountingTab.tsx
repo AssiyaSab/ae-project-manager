@@ -285,7 +285,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     doc.save(`Akt_Peredachi_TMC_${tool.id}.pdf`);
   };
 
-  if (currentUser?.role !== 'ADMIN' && currentUser?.role !== 'ACCOUNTANT') {
+  if (currentUser?.role !== 'ADMIN' && currentUser?.role !== 'ACCOUNTANT' && currentUser?.role !== 'CHIEF_ACCOUNTANT') {
     return <div style={{ color: 'var(--text-muted)' }}>Доступ к разделу Бухгалтерии есть только у Директора и Бухгалтера.</div>;
   }
 

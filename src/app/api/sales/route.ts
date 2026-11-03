@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { validateAuth, createAuditLog } from '@/lib/auth';
+import { validateAuth, createAuditLog, isChiefAccountantUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -139,9 +139,9 @@ export async function PATCH(request: Request) {
 
     // 1. Изменение статуса на PAID (Оплачено)
     if (status === 'PAID') {
-      const canConfirmPayment = ['ADMIN', 'ACCOUNTANT', 'MANAGER'].includes(user.role);
+      const canConfirmPayment = isChiefAccountantUser(user) || ['ADMIN', 'MANAGER'].includes(user.role);
       if (!canConfirmPayment) {
-        return NextResponse.json({ error: 'Только Бухгалтер или Администратор могут подтвердить оплату' }, { status: 403 });
+        return NextResponse.json({ error: 'Только Главный бухгалтер или Администратор могут подтвердить оплату' }, { status: 403 });
       }
       updateData.status = 'PAID';
       updateData.paidAt = new Date();

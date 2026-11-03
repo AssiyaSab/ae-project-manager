@@ -289,7 +289,8 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
 
   // Role helpers
   const canCreate = ['ADMIN', 'MANAGER', 'SUPPLY'].includes(currentUser?.role);
-  const isAccountantOrAdmin = ['ADMIN', 'ACCOUNTANT'].includes(currentUser?.role);
+  const isChiefAccountantOrAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || (currentUser?.role === 'ACCOUNTANT' && currentUser?.title?.toLowerCase().includes('главн'));
+  const isAccountantOrAdmin = ['ADMIN', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(currentUser?.role);
   const isWarehouseOrAdmin = ['ADMIN', 'WAREHOUSE', 'MANAGER'].includes(currentUser?.role);
 
   // Filters
@@ -572,8 +573,8 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
                           </button>
                         )}
 
-                        {/* Действие 2: Подтвердить оплату (Бухгалтер / Директор) */}
-                        {order.status === 'INVOICE_SENT' && isAccountantOrAdmin && (
+                        {/* Действие 2: Подтвердить оплату (Главный бухгалтер / Директор) */}
+                        {order.status === 'INVOICE_SENT' && isChiefAccountantOrAdmin && (
                           <button
                             onClick={() => handleUpdateStatus(order.id, 'PAID')}
                             className="inline-btn"
@@ -685,7 +686,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
                               Выставить счет
                             </button>
                           )}
-                          {order.status === 'INVOICE_SENT' && isAccountantOrAdmin && (
+                          {order.status === 'INVOICE_SENT' && isChiefAccountantOrAdmin && (
                             <button onClick={() => handleUpdateStatus(order.id, 'PAID')} className="btn-submit" style={{ width: '100%', padding: '6px', fontSize: '0.8rem', background: '#10b981', margin: 0 }}>
                               Подтвердить оплату
                             </button>

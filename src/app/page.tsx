@@ -271,7 +271,7 @@ export default function Home() {
       
       if (data.role === 'ADMIN' || data.role === 'MANAGER') {
         setActiveTab('dashboard');
-      } else if (data.role === 'ACCOUNTANT') {
+      } else if (data.role === 'ACCOUNTANT' || data.role === 'CHIEF_ACCOUNTANT') {
         setActiveTab('accounting');
       } else if (data.role === 'WAREHOUSE') {
         setActiveTab('tools');
@@ -863,7 +863,7 @@ export default function Home() {
             />
           </div>
           <nav className="dashboard-nav">
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
               <button 
                 className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
                 onClick={() => setActiveTab('dashboard')}
@@ -925,7 +925,7 @@ export default function Home() {
               📦 Инструменты
             </button>
             
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
               <button 
                 className={`nav-btn ${activeTab === 'accounting' ? 'active' : ''}`}
                 onClick={() => setActiveTab('accounting')}
@@ -949,7 +949,7 @@ export default function Home() {
           
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
-              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Директор' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
+              <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Директор' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'CHIEF_ACCOUNTANT' ? 'Главный бухгалтер' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
                 style={{
@@ -1646,6 +1646,7 @@ export default function Home() {
                     >
                       <option value="ADMIN">Директор / Администратор</option>
                       <option value="MANAGER">Руководитель</option>
+                      <option value="CHIEF_ACCOUNTANT">Главный бухгалтер</option>
                       <option value="ACCOUNTANT">Бухгалтер</option>
                       <option value="SUPPLY">Снабжение / Закупщик</option>
                       <option value="WAREHOUSE">Кладовщик</option>
@@ -1750,8 +1751,8 @@ export default function Home() {
                             <td style={{ padding: '10px', color: 'var(--text-muted)' }}>{u.phone || '—'}</td>
                             <td style={{ padding: '10px' }}>{u.title || '—'}</td>
                             <td style={{ padding: '10px' }}>
-                              <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'manager' ? 'design' : u.role.toLowerCase() === 'accountant' ? 'purchase' : u.role.toLowerCase() === 'supply' ? 'purchase' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
-                                {u.role === 'ADMIN' ? 'Директор' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'SUPPLY' ? 'Снабжение' : u.role === 'WAREHOUSE' ? 'Кладовщик' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
+                              <span className={`badge ${u.role.toLowerCase() === 'admin' ? 'design' : u.role.toLowerCase() === 'manager' ? 'design' : u.role.toLowerCase().includes('accountant') ? 'purchase' : u.role.toLowerCase() === 'supply' ? 'purchase' : u.role.toLowerCase() === 'engineer' ? 'commissioning' : 'assembly'}`}>
+                                {u.role === 'ADMIN' ? 'Директор' : u.role === 'MANAGER' ? 'Руководитель' : u.role === 'CHIEF_ACCOUNTANT' ? 'Главный бухгалтер' : u.role === 'ACCOUNTANT' ? 'Бухгалтер' : u.role === 'SUPPLY' ? 'Снабжение' : u.role === 'WAREHOUSE' ? 'Кладовщик' : u.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'}
                               </span>
                             </td>
                             <td style={{ padding: '10px' }}>
@@ -2139,6 +2140,7 @@ export default function Home() {
                 >
                   <option value="ADMIN">Директор / Администратор</option>
                   <option value="MANAGER">Руководитель</option>
+                  <option value="CHIEF_ACCOUNTANT">Главный бухгалтер</option>
                   <option value="ACCOUNTANT">Бухгалтер</option>
                   <option value="SUPPLY">Снабжение / Закупщик</option>
                   <option value="WAREHOUSE">Кладовщик</option>

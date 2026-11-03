@@ -107,7 +107,111 @@ export async function cancelSupplyTask(purchaseId: number) {
         where: { id: purchase.taskId }
       }).catch(() => {});
     }
+    if (purchase?.paymentTaskId) {
+      await prisma.task.delete({
+        where: { id: purchase.paymentTaskId }
+      }).catch(() => {});
+    }
   } catch (error) {
     console.error('Error canceling supply task for purchase #' + purchaseId, error);
+  }
+}
+
+/**
+ * Creates or updates a Project Task for CHIEF_ACCOUNTANT when an invoice is APPROVED_FOR_PAYMENT
+ */
+export async function createOrUpdatePaymentTask(purchaseId: number) {
+  try {
+    const purchase = await prisma.purchaseRequest.findUnique({
+      where: { id: purchaseId },
+      include: { project: true, requester: true }
+    });
+    if (!purchase) return null;
+
+    // Find Chief Accountants (role CHIEF_ACCOUNTANT or title contains "главн", fallback to ADMIN or any ACCOUNTANT)
+    let chiefAccountants = await prisma.user.findMany({
+      where: {
+        OR: [
+          { role: 'CHIEF_ACCOUNTANT' },
+          { role: 'ACCOUNTANT', title: { contains: 'главн', mode: 'insensitive' } }
+        ]
+      }
+    });
+
+    if (chiefAccountants.length === 0) {
+      chiefAccountants = await prisma.user.findMany({
+        where: { role: { in: ['CHIEF_ACCOUNTANT', 'ACCOUNTANT', 'ADMIN'] } }
+      });
+    }
+
+    const targetAssignees = chiefAccountants.map(u => ({ id: u.id }));
+    const taskName = `💳 Оплата счета: ${purchase.title} (${purchase.amount.toLocaleString('ru-RU')} ₸)`;
+    const taskDesc = `Счет на оплату ТМЦ по заявке #${purchase.id} утвержден Директором к оплате.\n` +
+      `Проект: «${purchase.project.name}».\n` +
+      `Поставщик: ${purchase.supplierName || 'Поставщик'}.\n` +
+      `Счет: №${purchase.invoiceNumber || 'б/н'}.\n` +
+      `Сумма к оплате: ${purchase.amount.toLocaleString('ru-RU')} ₸.\n` +
+      (purchase.invoiceFileUrl ? `📎 Ссылка на счет: ${purchase.invoiceFileUrl}\n` : '') +
+      `👉 Задача Главного бухгалтера: провести платеж в клиент-банке и подтвердить оплату.`;
+
+    if (purchase.paymentTaskId) {
+      const existingTask = await prisma.task.findUnique({ where: { id: purchase.paymentTaskId } });
+      if (existingTask) {
+        return await prisma.task.update({
+          where: { id: purchase.paymentTaskId },
+          data: {
+            name: taskName,
+            description: taskDesc,
+            status: 'IN_PROGRESS',
+            assignees: {
+              set: targetAssignees
+            }
+          }
+        });
+      }
+    }
+
+    // Create new Task in project
+    const newTask = await prisma.task.create({
+      data: {
+        projectId: purchase.projectId,
+        name: taskName,
+        description: taskDesc,
+        status: 'IN_PROGRESS',
+        assignees: {
+          connect: targetAssignees
+        }
+      }
+    });
+
+    // Link payment task to purchase request
+    await prisma.purchaseRequest.update({
+      where: { id: purchase.id },
+      data: { paymentTaskId: newTask.id }
+    });
+
+    return newTask;
+  } catch (error) {
+    console.error('Error creating/updating payment task for purchase #' + purchaseId, error);
+    return null;
+  }
+}
+
+/**
+ * Marks the payment task as DONE when payment is recorded by Chief Accountant
+ */
+export async function completePaymentTask(purchaseId: number) {
+  try {
+    const purchase = await prisma.purchaseRequest.findUnique({
+      where: { id: purchaseId }
+    });
+    if (purchase?.paymentTaskId) {
+      await prisma.task.update({
+        where: { id: purchase.paymentTaskId },
+        data: { status: 'DONE' }
+      }).catch(() => {});
+    }
+  } catch (error) {
+    console.error('Error completing payment task for purchase #' + purchaseId, error);
   }
 }

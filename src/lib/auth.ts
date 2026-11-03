@@ -32,9 +32,28 @@ export async function validateManager(request: Request) {
   return null;
 }
 
+export function isChiefAccountantUser(user: any) {
+  if (!user) return false;
+  if (user.role === 'ADMIN') return true;
+  if (user.role === 'CHIEF_ACCOUNTANT') return true;
+  if (user.role === 'ACCOUNTANT' && user.title && /главн/i.test(user.title)) return true;
+  return false;
+}
+
+export function isAccountantUser(user: any) {
+  if (!user) return false;
+  return isChiefAccountantUser(user) || user.role === 'ACCOUNTANT';
+}
+
+export async function validateChiefAccountant(request: Request) {
+  const user = await validateAuth(request);
+  if (user && isChiefAccountantUser(user)) return user;
+  return null;
+}
+
 export async function validateApprover(request: Request) {
   const user = await validateAuth(request);
-  if (user && (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'ACCOUNTANT')) return user;
+  if (user && (user.role === 'ADMIN' || user.role === 'MANAGER' || isAccountantUser(user))) return user;
   return null;
 }
 

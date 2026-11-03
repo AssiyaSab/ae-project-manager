@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ru } from 'date-fns/locale';
@@ -79,7 +79,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
   };
 
   const updateTripStatus = async (id: number, status: string) => {
-    if (!['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(currentUser?.role)) return;
+    if (!['ADMIN', 'MANAGER', 'ACCOUNTANT', 'CHIEF_ACCOUNTANT'].includes(currentUser?.role)) return;
     try {
       await fetch('/api/trips', {
         method: 'PATCH',

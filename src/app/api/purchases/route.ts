@@ -3,9 +3,9 @@ import { prisma } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
-import { validateAuth, createAuditLog } from '@/lib/auth';
+import { validateAuth, createAuditLog, isChiefAccountantUser } from '@/lib/auth';
 import { sendTelegramMessage } from '@/lib/telegram';
-import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask } from '@/lib/supply-tasks';
+import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask, createOrUpdatePaymentTask, completePaymentTask } from '@/lib/supply-tasks';
 
 export async function GET(request: Request) {
   const user = await validateAuth(request);
@@ -161,6 +161,13 @@ export async function PATCH(request: Request) {
       }
     }
 
+    // Security check: Only Chief Accountant or Admin can confirm payment
+    if ((status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') && status !== currentPurchase.status) {
+      if (!isChiefAccountantUser(user)) {
+        return NextResponse.json({ error: 'Только Главный бухгалтер или Директор имеет право подтверждать оплату счетов' }, { status: 403 });
+      }
+    }
+
     const data: any = {};
     if (status !== undefined) data.status = status;
     if (title !== undefined) data.title = title;
@@ -264,12 +271,28 @@ export async function PATCH(request: Request) {
           }
         }
 
-        // 3. Директор утвердил счет -> Уведомляем Бухгалтерию
+        // 3. Директор утвердил счет -> Создаем задачу Главному бухгалтеру и уведомляем
         if (status === 'APPROVED_FOR_PAYMENT') {
-          const accountants = await prisma.user.findMany({
-            where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+          // Создаем персональную задачу на оплату для Главного бухгалтера
+          await createOrUpdatePaymentTask(updated.id);
+
+          const chiefAccountants = await prisma.user.findMany({
+            where: {
+              OR: [
+                { role: 'CHIEF_ACCOUNTANT' },
+                { role: 'ACCOUNTANT', title: { contains: 'главн', mode: 'insensitive' } },
+                { role: 'ADMIN' }
+              ],
+              telegramId: { not: null }
+            }
           });
-          const msg = `💳 *Счет согласован к оплате*\n\n` +
+
+          // Если отдельный Главный бухгалтер не назначен, уведомляем всех бухгалтеров
+          const notifyAccountants = chiefAccountants.length > 0 
+            ? chiefAccountants 
+            : await prisma.user.findMany({ where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } } });
+
+          const msg = `💳 *Счет согласован Директором к оплате!*\n\n` +
             `*Проект:* ${updated.project?.name}\n` +
             `*Поставщик:* ${updated.supplierName || 'Не указан'}\n` +
             `*Счет:* №${updated.invoiceNumber || 'б/н'}\n` +
@@ -285,13 +308,15 @@ export async function PATCH(request: Request) {
             ]
           };
 
-          for (const acc of accountants) {
+          for (const acc of notifyAccountants) {
             if (acc.telegramId) await sendTelegramMessage(acc.telegramId, msg, { parse_mode: 'Markdown', reply_markup: paymentKeyboard });
           }
         }
 
-        // 4. Оплачено -> Уведомляем Бухгалтерию (кнопка Прикрепить доверенность) и Снабженца
+        // 4. Оплачено -> Завершаем задачу на оплату, уведомляем Бухгалтерию (доверенность) и Снабженца
         if (status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') {
+          // Завершаем задачу на оплату счета (DONE)
+          await completePaymentTask(updated.id);
           if (status === 'PAID_AND_ORDERED' || status === 'PAID') {
             const accountants = await prisma.user.findMany({
               where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }

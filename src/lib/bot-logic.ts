@@ -2,7 +2,8 @@ import { prisma } from './db';
 import { analyzeReport } from './gemini';
 import { sendTelegramMessage, forwardTelegramMessage, editTelegramMessageText } from './telegram';
 import { formatDate } from './formatters';
-import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask } from './supply-tasks';
+import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask, createOrUpdatePaymentTask, completePaymentTask } from './supply-tasks';
+import { isChiefAccountantUser } from './auth';
 
 export interface BotResponse {
   replyText: string;
@@ -604,9 +605,23 @@ export async function handleIncomingBotMessage(
 
           await prisma.auditLog.delete({ where: { id: pendingLog.id } }).catch(() => {});
 
-          const accountants = await prisma.user.findMany({
-            where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+          // Создаем задачу на оплату для Главного бухгалтера
+          await createOrUpdatePaymentTask(pur.id);
+
+          const chiefAccountants = await prisma.user.findMany({
+            where: {
+              OR: [
+                { role: 'CHIEF_ACCOUNTANT' },
+                { role: 'ACCOUNTANT', title: { contains: 'главн', mode: 'insensitive' } },
+                { role: 'ADMIN' }
+              ],
+              telegramId: { not: null }
+            }
           });
+          const targetAccountants = chiefAccountants.length > 0 
+            ? chiefAccountants 
+            : await prisma.user.findMany({ where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } } });
+
           const accMsg = `💳 *Крупный счет утвержден к оплате!*\n\n` +
             `*Проект:* ${pur.project.name}\n` +
             `*ТМЦ:* ${pur.title}\n` +
@@ -622,7 +637,7 @@ export async function handleIncomingBotMessage(
             ]
           };
 
-          for (const acc of accountants) {
+          for (const acc of targetAccountants) {
             if (acc.telegramId) await sendTelegramMessage(acc.telegramId, accMsg, { parse_mode: 'Markdown', reply_markup: accKeyboard });
           }
 
@@ -1586,6 +1601,9 @@ export async function handleIncomingBotMessage(
         data: { status: 'APPROVED_FOR_PAYMENT' }
       });
 
+      // Создаем персональную задачу на оплату для Главного бухгалтера
+      await createOrUpdatePaymentTask(purId);
+
       if (messageId && chatId) {
         await editTelegramMessageText(
           chatId,
@@ -1596,9 +1614,20 @@ export async function handleIncomingBotMessage(
         );
       }
 
-      const accountants = await prisma.user.findMany({
-        where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+      const chiefAccountants = await prisma.user.findMany({
+        where: {
+          OR: [
+            { role: 'CHIEF_ACCOUNTANT' },
+            { role: 'ACCOUNTANT', title: { contains: 'главн', mode: 'insensitive' } },
+            { role: 'ADMIN' }
+          ],
+          telegramId: { not: null }
+        }
       });
+      const targetAccountants = chiefAccountants.length > 0 
+        ? chiefAccountants 
+        : await prisma.user.findMany({ where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } } });
+
       const accMsg = `💳 *Счет утвержден к оплате!*\n\n` +
         `*Проект:* ${pur.project.name}\n` +
         `*ТМЦ:* ${pur.title}\n` +
@@ -1611,7 +1640,7 @@ export async function handleIncomingBotMessage(
           [{ text: '💳 Подтвердить: Оплачено', callback_data: `pur_pay_inv_${pur.id}` }]
         ]
       };
-      for (const acc of accountants) {
+      for (const acc of targetAccountants) {
         if (acc.telegramId) await sendTelegramMessage(acc.telegramId, accMsg, { parse_mode: 'Markdown', reply_markup: accKeyboard });
       }
 
@@ -1621,10 +1650,10 @@ export async function handleIncomingBotMessage(
       };
     }
 
-    // 4. PAY INVOICE (Accountant)
+    // 4. PAY INVOICE (Chief Accountant)
     if (purPayInvMatch) {
-      if (!['ACCOUNTANT', 'ADMIN'].includes(user.role)) {
-        return { replyText: '⚠️ У вас нет прав бухгалтера для отметки оплаты.' };
+      if (!isChiefAccountantUser(user)) {
+        return { replyText: '⚠️ У вас нет полномочий Главного бухгалтера для подтверждения оплаты счетов. Право проведения платежей закреплено за Главным бухгалтером и Директором.' };
       }
       const purId = Number(purPayInvMatch[1]);
       const pur = await prisma.purchaseRequest.update({
@@ -1632,6 +1661,9 @@ export async function handleIncomingBotMessage(
         data: { status: 'PAID_AND_ORDERED', paidAt: new Date() },
         include: { project: true, requester: true, supplyUser: true }
       });
+
+      // Завершаем персональную задачу на оплату счета (DONE)
+      await completePaymentTask(pur.id);
 
       if (messageId && chatId) {
         await editTelegramMessageText(
