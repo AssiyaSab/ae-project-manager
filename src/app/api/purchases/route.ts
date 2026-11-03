@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 
 import { validateAuth, createAuditLog } from '@/lib/auth';
 import { sendTelegramMessage } from '@/lib/telegram';
+import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask } from '@/lib/supply-tasks';
 
 export async function GET(request: Request) {
   const user = await validateAuth(request);
@@ -209,6 +210,9 @@ export async function PATCH(request: Request) {
       if (status && status !== currentPurchase.status) {
         // 1. ГИП / Директор одобрил потребность -> Уведомляем Снабжение
         if (status === 'IN_PROCUREMENT' || (currentPurchase.status === 'PENDING_APPROVAL' && status === 'APPROVED')) {
+          // Создаем или обновляем производственную задачу снабженцу в проекте
+          await createOrUpdateSupplyTask(updated.id);
+
           const supplyUsers = await prisma.user.findMany({
             where: { role: { in: ['SUPPLY', 'ADMIN'] }, telegramId: { not: null } }
           });
@@ -382,8 +386,10 @@ export async function PATCH(request: Request) {
           }
         }
 
-        // 5. Доставлено -> Уведомляем заявителя
+        // 5. Доставлено -> Уведомляем заявителя и завершаем задачу снабжения
         if (status === 'DELIVERED') {
+          await completeSupplyTask(updated.id);
+
           if (updated.requester?.telegramId) {
             const msg = `🎉 *Материалы поступили!*\n\n` +
               `*Проект:* ${updated.project?.name}\n` +
@@ -391,6 +397,11 @@ export async function PATCH(request: Request) {
               `📦 Заказ доставлен и готов к выдаче в производство / на объект.`;
             await sendTelegramMessage(updated.requester.telegramId, msg, { parse_mode: 'Markdown' });
           }
+        }
+
+        // 6. Отклонено -> отменяем задачу снабжения
+        if (status === 'REJECTED') {
+          await cancelSupplyTask(updated.id);
         }
       }
     } catch (tgError) {

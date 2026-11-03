@@ -2,6 +2,7 @@ import { prisma } from './db';
 import { analyzeReport } from './gemini';
 import { sendTelegramMessage, forwardTelegramMessage, editTelegramMessageText } from './telegram';
 import { formatDate } from './formatters';
+import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask } from './supply-tasks';
 
 export interface BotResponse {
   replyText: string;
@@ -1391,6 +1392,9 @@ export async function handleIncomingBotMessage(
         include: { project: true, requester: true, supplyUser: true }
       });
 
+      // Обновляем задачу снабжения в проекте
+      await createOrUpdateSupplyTask(pur.id);
+
       if (messageId && chatId) {
         await editTelegramMessageText(
           chatId,
@@ -1473,6 +1477,9 @@ export async function handleIncomingBotMessage(
         include: { project: true, requester: true }
       });
 
+      // Автоматически создаем производственную задачу снабженцу в проекте
+      await createOrUpdateSupplyTask(pur.id);
+
       if (messageId && chatId) {
         await editTelegramMessageText(
           chatId,
@@ -1518,6 +1525,9 @@ export async function handleIncomingBotMessage(
         data: { status: 'REJECTED' },
         include: { project: true, requester: true }
       });
+
+      // Отменяем/удаляем связанную задачу снабжения
+      await cancelSupplyTask(pur.id);
 
       if (messageId && chatId) {
         await editTelegramMessageText(
@@ -1712,6 +1722,9 @@ export async function handleIncomingBotMessage(
         data: { status: 'DELIVERED', deliveredAt: new Date(), receivedByUserId: user.id },
         include: { project: true, requester: true, supplyUser: true }
       });
+
+      // Автоматически закрываем задачу снабжения как выполненную (DONE)
+      await completeSupplyTask(pur.id);
 
       if (messageId && chatId) {
         await editTelegramMessageText(
