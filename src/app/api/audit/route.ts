@@ -9,12 +9,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
+    const { searchParams } = new URL(request.url);
+    const isAll = searchParams.get('all') === 'true';
+    const limitParam = searchParams.get('limit');
+    const take = isAll ? undefined : (limitParam ? parseInt(limitParam, 10) : 100);
+
     const logs = await prisma.auditLog.findMany({
       include: {
         user: true
       },
       orderBy: { createdAt: 'desc' },
-      take: 100 // Only load the last 100 logs to prevent heavy payloads
+      take: take
     });
     return NextResponse.json(logs);
   } catch (error) {

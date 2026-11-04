@@ -736,6 +736,73 @@ export default function Home() {
     exportToCSV('tasks_report.csv', headers, rows);
   };
 
+  // Export Audit Logs to TXT (Формат Блокнота с поддержкой кириллицы UTF-8 BOM)
+  const handleExportAuditLogsTxt = async () => {
+    try {
+      let logsToExport = auditLogs;
+      // Try to fetch full history from API
+      try {
+        const headers = {
+          'x-admin-password': adminPassword || '',
+          'x-auth-password': adminPassword || '',
+          'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+        };
+        const res = await fetch('/api/audit?all=true', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            logsToExport = data;
+          }
+        }
+      } catch (e) {
+        console.warn('Could not fetch all logs, using loaded state:', e);
+      }
+
+      if (!logsToExport || logsToExport.length === 0) {
+        alert('Журнал действий пуст, нет записей для выгрузки.');
+        return;
+      }
+
+      const nowStr = formatDateTime(new Date());
+      let content = '========================================================================================\r\n';
+      content += 'ЖУРНАЛ ДЕЙСТВИЙ И АУДИТА СИСТЕМЫ (AUDIT LOGS)\r\n';
+      content += 'ТОО «АзияЭнергоАвтоматика»\r\n';
+      content += `Дата выгрузки: ${nowStr}\r\n`;
+      content += `Всего записей: ${logsToExport.length}\r\n`;
+      content += '========================================================================================\r\n\r\n';
+
+      logsToExport.forEach((log: any, index: number) => {
+        const dt = formatDateTime(log.createdAt);
+        const userName = log.user 
+          ? `${log.user.name} (Роль: ${log.user.role}${log.user.title ? ', Должность: ' + log.user.title : ''})` 
+          : 'Система / Мастер-Администратор';
+        const action = log.action || 'ДЕЙСТВИЕ';
+        const details = log.details || '—';
+
+        content += `[${dt}] Запись #${log.id} (${index + 1} из ${logsToExport.length})\r\n`;
+        content += `Пользователь: ${userName}\r\n`;
+        content += `Действие:     ${action}\r\n`;
+        content += `Детали:       ${details}\r\n`;
+        content += '----------------------------------------------------------------------------------------\r\n';
+      });
+
+      const bom = '\uFEFF'; // UTF-8 BOM для безупречного открытия в Блокноте Windows
+      const blob = new Blob([bom + content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const datePart = new Date().toISOString().split('T')[0];
+      link.download = `Audit_Logs_${datePart}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Ошибка при выгрузке журнала аудита:', err);
+      alert('Произошла ошибка при выгрузке журнала действий.');
+    }
+  };
+
   // CSV Import parser helper
   const parseCSVRow = (text: string, separator: string): string[] => {
     const result: string[] = [];
@@ -1824,7 +1891,30 @@ export default function Home() {
 
               {/* Audit Logs */}
               <section className="form-card">
-                <h2 className="form-title">🔍 Журнал действий (Audit Logs)</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+                  <h2 className="form-title" style={{ margin: 0 }}>🔍 Журнал действий (Audit Logs)</h2>
+                  <button
+                    onClick={handleExportAuditLogsTxt}
+                    className="btn-submit"
+                    style={{
+                      background: '#10b981',
+                      color: '#fff',
+                      padding: '8px 16px',
+                      fontSize: '0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      cursor: 'pointer',
+                      borderRadius: '6px',
+                      border: 'none',
+                      fontWeight: 600,
+                      margin: 0
+                    }}
+                    title="Выгрузить журнал действий в текстовый файл (.txt для Блокнота)"
+                  >
+                    📝 Скачать в Блокнот (.txt)
+                  </button>
+                </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="data-table">
                     <thead>
