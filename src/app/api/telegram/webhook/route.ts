@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { handleIncomingBotMessage } from '@/lib/bot-logic';
-import { sendTelegramMessage, answerTelegramCallbackQuery } from '@/lib/telegram';
+import {
+  handleIncomingBotMessage,
+  hasActiveFsmState,
+  isFsmCommandOrMenuButton,
+  defaultUserKeyboard,
+} from '@/lib/bot-logic';
+import { sendTelegramMessage, answerTelegramCallbackQuery, getTelegramFileUrl } from '@/lib/telegram';
+import { processAiMessage } from '@/lib/ai/agentDispatcher';
+import { prisma } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,7 +22,7 @@ export async function POST(req: NextRequest) {
       const phone = msg.contact?.phone_number;
       const text = msg.text || msg.caption || (phone ? '/start' : '');
 
-      let fileContext = null;
+      let fileContext: { type: string; fileId: string; fileName?: string } | null = null;
       if (msg.document) {
         fileContext = { type: 'document', fileId: msg.document.file_id, fileName: msg.document.file_name };
       } else if (msg.photo && msg.photo.length > 0) {
@@ -27,23 +34,78 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, note: 'No chatId found' });
       }
 
-      const response = await handleIncomingBotMessage(
-        { phone, telegramId, username },
-        text,
-        fileContext,
-        msg.message_id,
-        chatId
-      );
-
-      const options: any = {
-        parse_mode: 'Markdown',
-      };
-
-      if (response.keyboard) {
-        options.reply_markup = response.keyboard;
+      // Check if user is known / registered
+      let user = telegramId ? await prisma.user.findUnique({ where: { telegramId } }) : null;
+      if (!user && phone) {
+        const cleanDigits = phone.replace(/\D/g, '');
+        if (cleanDigits.length >= 10) {
+          user = await prisma.user.findFirst({
+            where: { phone: { contains: cleanDigits.substring(cleanDigits.length - 10) } },
+          });
+        }
       }
 
-      await sendTelegramMessage(chatId, response.replyText, options);
+      // If user is not yet authorized or sharing contact -> route to registration flow in FSM
+      if (!user || phone) {
+        const response = await handleIncomingBotMessage(
+          { phone, telegramId, username },
+          text,
+          fileContext,
+          msg.message_id,
+          chatId
+        );
+
+        const options: any = { parse_mode: 'Markdown' };
+        if (response.keyboard) options.reply_markup = response.keyboard;
+        await sendTelegramMessage(chatId, response.replyText, options);
+        return NextResponse.json({ ok: true });
+      }
+
+      // Check if user has an active FSM state or sent a menu/command button
+      const inFsm = await hasActiveFsmState(user.id);
+      const isCommandOrMenu = isFsmCommandOrMenuButton(text);
+
+      if (inFsm || isCommandOrMenu) {
+        // Strict FSM state controller
+        const response = await handleIncomingBotMessage(
+          { phone, telegramId, username },
+          text,
+          fileContext,
+          msg.message_id,
+          chatId
+        );
+
+        const options: any = { parse_mode: 'Markdown' };
+        if (response.keyboard) options.reply_markup = response.keyboard;
+        await sendTelegramMessage(chatId, response.replyText, options);
+        return NextResponse.json({ ok: true });
+      }
+
+      // No active FSM state: Free text or photo/document intercepted by AI Agent Dispatcher
+      let photoUrl: string | null = null;
+      if (fileContext?.fileId) {
+        photoUrl = await getTelegramFileUrl(fileContext.fileId);
+      }
+
+      const activeTask = await prisma.task.findFirst({
+        where: {
+          assignees: { some: { id: user.id } },
+          status: { not: 'DONE' },
+        },
+        select: { projectId: true },
+      });
+
+      const aiResponse = await processAiMessage({
+        text,
+        photoUrl,
+        user,
+        activeProjectId: activeTask?.projectId,
+      });
+
+      await sendTelegramMessage(chatId, aiResponse.replyText, {
+        parse_mode: 'Markdown',
+        reply_markup: defaultUserKeyboard,
+      });
 
       return NextResponse.json({ ok: true });
     }
@@ -92,7 +154,7 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   return NextResponse.json({
     status: 'online',
-    service: 'AE Project Manager Telegram Webhook',
+    service: 'AE Project Manager Telegram Webhook with Gemini AI Agent Dispatcher',
     timestamp: new Date().toISOString(),
   });
 }

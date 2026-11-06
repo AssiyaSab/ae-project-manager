@@ -13,7 +13,7 @@ export interface BotResponse {
   isUnregistered?: boolean;
 }
 
-const defaultUserKeyboard = {
+export const defaultUserKeyboard = {
   keyboard: [
     [{ text: '📝 Подать заявку на закупку' }, { text: '✈️ Заявка на командировку' }],
     [{ text: '📋 Мои задачи' }, { text: '🛠 Мой инструмент' }],
@@ -22,6 +22,48 @@ const defaultUserKeyboard = {
   resize_keyboard: true,
   is_persistent: true,
 };
+
+export const FSM_ACTIONS = [
+  'PENDING_PIN_APPROVAL',
+  'APPROVE_PURCHASE_PIN',
+  'PUR_WIZ_NAME',
+  'PUR_WIZ_AMOUNT',
+  'PUR_WIZ_PHOTO',
+  'SUPPLY_WIZ_AMOUNT',
+  'SUPPLY_WIZ_FILE',
+  'ACC_WIZ_POA_INFO',
+  'ACC_WIZ_POA_FILE',
+  'TRIP_WIZ_DEST',
+  'TRIP_WIZ_DATES',
+  'TRIP_WIZ_BUDGET',
+  'AWAITING_PURCHASE_SPEC',
+];
+
+export async function hasActiveFsmState(userId: number): Promise<boolean> {
+  const activeLog = await prisma.auditLog.findFirst({
+    where: {
+      userId,
+      action: { in: FSM_ACTIONS },
+      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  return !!activeLog;
+}
+
+export function isFsmCommandOrMenuButton(text: string): boolean {
+  if (!text) return false;
+  const clean = text.trim();
+  if (clean.startsWith('/')) return true;
+  const menuButtons = [
+    '📝 Подать заявку на закупку',
+    '✈️ Заявка на командировку',
+    '📋 Мои задачи',
+    '🛠 Мой инструмент',
+    '🔄 Главное меню (/start)',
+  ];
+  return menuButtons.includes(clean);
+}
 
 function parseDateRange(dateStr: string) {
   const currentYear = new Date().getFullYear();
@@ -1998,86 +2040,25 @@ export async function handleIncomingBotMessage(
   }
 
   // =========================================================================
-  // 6. Free Text Report Analysis with Gemini AI
+  // 6. Free Text / AI Agent Dispatcher Layer (Gemini Function Calling)
   // =========================================================================
-  const activeTasks = await prisma.task.findMany({
+  const { processAiMessage } = await import('@/lib/ai/agentDispatcher');
+  const activeTask = await prisma.task.findFirst({
     where: {
-      assignees: {
-        some: { id: user.id },
-      },
+      assignees: { some: { id: user.id } },
       status: { not: 'DONE' },
     },
-    include: {
-      project: {
-        include: { manager: true },
-      },
-    },
+    include: { project: true },
   });
 
-  if (activeTasks.length === 0) {
-    return {
-      replyText: 'Вы отправили сообщение, но у вас нет активных задач в системе, к которым можно привязать отчет. Используйте меню кнопок ниже.',
-      keyboard: defaultUserKeyboard,
-    };
-  }
-
-  const targetTask = activeTasks.find((t) => t.status === 'IN_PROGRESS') || activeTasks[0];
-
-  const aiResult = await analyzeReport(cleanText);
-  let replyText = `🤖 *ИИ-Анализ отчета (AE Automation):*\n\n`;
-  replyText += `• Задача: *${targetTask.name}* (_${targetTask.project.name}_)\n`;
-  replyText += `• Блокер / проблема: *${aiResult.isBlock ? 'Да ⚠️' : 'Нет'}*\n`;
-  if (aiResult.isBlock && aiResult.summary) {
-    replyText += `• Суть проблемы: _${aiResult.summary}_\n`;
-  }
-  if (aiResult.status) {
-    replyText += `• Рекомендуемый статус: *${aiResult.status}*\n`;
-  }
-  replyText += `• Анализ: _${aiResult.explanation}_\n\n`;
-
-  let updatedTask = null;
-  let createdAlert = null;
-
-  const updates: any = {};
-  if (aiResult.isBlock) {
-    updates.status = 'BLOCKED';
-  } else if (aiResult.status) {
-    updates.status = aiResult.status;
-  }
-
-  if (Object.keys(updates).length > 0) {
-    updatedTask = await prisma.task.update({
-      where: { id: targetTask.id },
-      data: updates,
-    });
-    replyText += `✅ Статус задачи обновлен на *${updates.status}* в веб-панели.`;
-
-    if (aiResult.isBlock) {
-      const alertReason = aiResult.summary || cleanText;
-      createdAlert = await prisma.alert.create({
-        data: {
-          taskId: targetTask.id,
-          text: alertReason,
-          status: 'ACTIVE',
-        },
-      });
-
-      await notifyManagersAboutBlocker(targetTask.project, targetTask, user, alertReason);
-      replyText += `\n🚨 *Директор и руководство получили мгновенное уведомление в Telegram.*`;
-    } else {
-      await prisma.alert.updateMany({
-        where: { taskId: targetTask.id, status: 'ACTIVE' },
-        data: { status: 'RESOLVED' },
-      });
-    }
-  } else {
-    replyText += `Статус задачи не изменился. Отчет зафиксирован.`;
-  }
+  const aiResult = await processAiMessage({
+    text: cleanText,
+    user,
+    activeProjectId: activeTask?.projectId,
+  });
 
   return {
-    replyText,
-    updatedTask,
-    createdAlert,
+    replyText: aiResult.replyText,
     keyboard: defaultUserKeyboard,
   };
 }
