@@ -750,7 +750,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
                     />
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label" style={{ fontSize: '0.8rem' }}>БИН / ИИН</label>
+                    <label className="form-label" style={{ fontSize: '0.8rem' }}>БИН</label>
                     <input
                       type="text"
                       className="form-input"

@@ -123,7 +123,7 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
             <td style={{ fontWeight: 'bold', verticalAlign: 'top', padding: '3px 0' }}>Покупатель:</td>
             <td style={{ verticalAlign: 'top', padding: '3px 0' }}>
               <strong>{order.customerName}</strong>
-              {order.customerBin ? `, БИН/ИИН: ${order.customerBin}` : ''}
+              {order.customerBin ? `, БИН: ${order.customerBin}` : ''}
               {order.customerAddress ? `, адрес: ${order.customerAddress}` : ''}
               {order.customerPhone ? `, тел: ${order.customerPhone}` : ''}
             </td>
@@ -205,7 +205,7 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
           <div style={{ width: '48%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span>Бухгалтер:</span>
-              <span style={{ textDecoration: 'underline' }}>Быкаев К.Ж.</span>
+              <span style={{ textDecoration: 'underline' }}>Бахтыбаева М.</span>
             </div>
             <div style={{ fontSize: '9px', textAlign: 'center', color: '#666' }}>(подпись / расшифровка)</div>
           </div>

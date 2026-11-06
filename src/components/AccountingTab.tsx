@@ -268,7 +268,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
         'Номер счета': s.orderNumber,
         'Дата счета': formatDate(s.invoiceDate || s.createdAt),
         'Покупатель': s.customerName,
-        'БИН / ИИН': s.customerBin || '-',
+        'БИН': s.customerBin || '-',
         'Телефон': s.customerPhone || '-',
         'Адрес': s.customerAddress || '-',
         'Бренд': s.brand || 'ONKA',
