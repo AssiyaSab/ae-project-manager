@@ -28,7 +28,7 @@ export async function validateAdmin(request: Request) {
 
 export async function validateManager(request: Request) {
   const user = await validateAuth(request);
-  if (user && (user.role === 'ADMIN' || user.role === 'MANAGER')) return user;
+  if (user && (user.role === 'ADMIN' || user.role === 'MANAGER' || isChiefAccountantUser(user))) return user;
   return null;
 }
 

@@ -15,6 +15,16 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
   const [trips, setTrips] = useState<any[]>([]);
   const [tools, setTools] = useState<any[]>([]);
   const [sales, setSales] = useState<any[]>([]);
+  const [accountingTasks, setAccountingTasks] = useState<any[]>([]);
+
+  // Task creation state for Chief Accountant
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [taskName, setTaskName] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskProjectId, setTaskProjectId] = useState<number | string>('');
+  const [taskAssigneeId, setTaskAssigneeId] = useState<number | string>('');
+  const [taskCost, setTaskCost] = useState('');
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   // Modal State for Issuing POA
   const [selectedPurchaseForPoa, setSelectedPurchaseForPoa] = useState<any>(null);
@@ -76,6 +86,105 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
     }
   };
 
+  const isChiefAccountant = currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || (currentUser?.role === 'ACCOUNTANT' && /главн/i.test(currentUser?.title || ''));
+  const accountants = users?.filter((u: any) => u.role === 'ACCOUNTANT' || u.role === 'CHIEF_ACCOUNTANT') || [];
+
+  const quickTemplates = [
+    '📜 Выписать доверенность формы Д-1',
+    '⚖️ Составить акт сверки с контрагентом',
+    '📊 Подготовить отчет / декларацию (ф. 300.00)',
+    '💳 Провести банковские платежи в банк-клиенте',
+    '🧾 Проверить авансовые отчеты и чеки',
+    '📥 Разнести банковскую выписку в 1С',
+    '📁 Запросить оригиналы накладных у поставщика'
+  ];
+
+  const handleCreateAccountingTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskName.trim() || !taskProjectId) {
+      alert('Пожалуйста, выберите проект и укажите название задачи');
+      return;
+    }
+    setIsCreatingTask(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'x-auth-password': pass || '',
+        'x-admin-password': pass || '',
+        'x-auth-login': typeof window !== 'undefined' ? localStorage.getItem('ae_auth_login') || '' : ''
+      };
+
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          projectId: Number(taskProjectId),
+          name: taskName.trim(),
+          description: taskDescription.trim() || null,
+          status: 'PENDING',
+          cost: taskCost ? parseFloat(taskCost) : null,
+          assigneeIds: taskAssigneeId ? [Number(taskAssigneeId)] : []
+        })
+      });
+
+      if (res.ok) {
+        alert('Поручение успешно создано! Исполнителю направлено уведомление в Telegram.');
+        setIsTaskModalOpen(false);
+        setTaskName('');
+        setTaskDescription('');
+        setTaskCost('');
+        fetchData();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Ошибка при создании задачи');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Ошибка соединения с сервером');
+    } finally {
+      setIsCreatingTask(false);
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: number, newStatus: string) => {
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': pass || '',
+          'x-auth-password': pass || '',
+          'x-auth-login': typeof window !== 'undefined' ? localStorage.getItem('ae_auth_login') || '' : ''
+        },
+        body: JSON.stringify({ taskId, status: newStatus })
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: number) => {
+    if (!window.confirm('Вы уверены, что хотите удалить эту задачу?')) return;
+    try {
+      const res = await fetch(`/api/tasks?taskId=${taskId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-password': pass || '',
+          'x-auth-password': pass || '',
+          'x-auth-login': typeof window !== 'undefined' ? localStorage.getItem('ae_auth_login') || '' : ''
+        }
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') : '';
 
   const fetchData = async () => {
@@ -86,16 +195,18 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
         'x-admin-password': pass,
         'x-auth-login': typeof window !== 'undefined' ? localStorage.getItem('ae_auth_login') || '' : ''
       };
-      const [pRes, tRes, tlRes, sRes] = await Promise.all([
+      const [pRes, tRes, tlRes, sRes, tasksRes] = await Promise.all([
         fetch('/api/purchases', { headers }).then(r => r.json()),
         fetch('/api/trips', { headers }).then(r => r.json()),
         fetch('/api/tools', { headers }).then(r => r.json()),
-        fetch('/api/sales', { headers }).then(r => r.json()).catch(() => [])
+        fetch('/api/sales', { headers }).then(r => r.json()).catch(() => []),
+        fetch('/api/tasks?department=accounting', { headers }).then(r => r.json()).catch(() => [])
       ]);
       if (Array.isArray(pRes)) setPurchases(pRes);
       if (Array.isArray(tRes)) setTrips(tRes);
       if (Array.isArray(tlRes)) setTools(tlRes);
       if (Array.isArray(sRes)) setSales(sRes);
+      if (Array.isArray(tasksRes)) setAccountingTasks(tasksRes);
     } catch (e) {
       console.error(e);
     }
@@ -333,7 +444,165 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
         </div>
       </div>
 
-      {/* 2. Оформление доверенностей формы Д-1 на получение ТМЦ */}
+      {/* 2. Поручения и операционные задачи бухгалтерии */}
+      <div className="card">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
+          <div>
+            <h2 className="card-title" style={{ margin: 0 }}>📋 Поручения и операционные задачи бухгалтерии</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '4px 0 0 0' }}>
+              Контроль задач бухгалтеров: сверки, первичка, доверенности, платежи и отчетность
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ 
+              padding: '4px 12px', 
+              borderRadius: '12px', 
+              background: accountingTasks.filter(t => t.status !== 'DONE').length > 0 ? '#3b82f620' : '#10b98120', 
+              color: accountingTasks.filter(t => t.status !== 'DONE').length > 0 ? '#60a5fa' : '#34d399',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              border: '1px solid currentColor'
+            }}>
+              {accountingTasks.filter(t => t.status !== 'DONE').length} в работе
+            </span>
+            {isChiefAccountant && (
+              <button
+                onClick={() => {
+                  setTaskProjectId(projects[0]?.id || '');
+                  setTaskAssigneeId(accountants.find((a: any) => a.role === 'ACCOUNTANT')?.id || accountants[0]?.id || '');
+                  setIsTaskModalOpen(true);
+                }}
+                className="btn-submit"
+                style={{
+                  margin: 0,
+                  padding: '8px 16px',
+                  background: '#3b82f6',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                ➕ Поручить задачу бухгалтеру
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                <th style={{ padding: '10px' }}>Задача / Детали</th>
+                <th style={{ padding: '10px' }}>Проект</th>
+                <th style={{ padding: '10px' }}>Исполнитель</th>
+                <th style={{ padding: '10px', textAlign: 'center' }}>Статус</th>
+                <th style={{ padding: '10px', textAlign: 'right' }}>Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accountingTasks.map(task => (
+                <tr key={task.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <td style={{ padding: '10px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{task.name}</div>
+                    {task.description && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {task.description}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#38bdf8' }}>{task.project?.name || 'Общий'}</span>
+                  </td>
+                  <td style={{ padding: '10px' }}>
+                    {task.assignees && task.assignees.length > 0 ? (
+                      <div>
+                        {task.assignees.map((a: any) => (
+                          <div key={a.id} style={{ fontWeight: 500 }}>
+                            👤 {a.name} <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>({a.title || (a.role === 'CHIEF_ACCOUNTANT' ? 'Главбух' : 'Бухгалтер')})</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Не назначен</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'center' }}>
+                    {task.status === 'PENDING' && (
+                      <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', background: '#f59e0b20', color: '#fbbf24', border: '1px solid #f59e0b40' }}>
+                        Ожидает
+                      </span>
+                    )}
+                    {task.status === 'IN_PROGRESS' && (
+                      <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', background: '#3b82f620', color: '#60a5fa', border: '1px solid #3b82f640' }}>
+                        В работе
+                      </span>
+                    )}
+                    {task.status === 'DONE' && (
+                      <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', background: '#10b98120', color: '#34d399', border: '1px solid #10b98140' }}>
+                        Выполнено ✅
+                      </span>
+                    )}
+                    {task.status === 'BLOCKED' && (
+                      <span style={{ padding: '3px 8px', borderRadius: '4px', fontSize: '11px', background: '#ef444420', color: '#f87171', border: '1px solid #ef444440' }}>
+                        Блок ⚠️
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {task.status !== 'IN_PROGRESS' && task.status !== 'DONE' && (
+                        <button
+                          onClick={() => handleUpdateTaskStatus(task.id, 'IN_PROGRESS')}
+                          className="inline-btn"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', background: '#3b82f620', color: '#60a5fa' }}
+                          title="Взять задачу в работу"
+                        >
+                          ▶️ В работу
+                        </button>
+                      )}
+                      {task.status !== 'DONE' && (
+                        <button
+                          onClick={() => handleUpdateTaskStatus(task.id, 'DONE')}
+                          className="inline-btn"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', background: '#10b98120', color: '#34d399', fontWeight: 600 }}
+                          title="Отметить выполненной"
+                        >
+                          ✅ Готово
+                        </button>
+                      )}
+                      {isChiefAccountant && (
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="inline-btn"
+                          style={{ padding: '4px 8px', fontSize: '0.75rem', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}
+                          title="Удалить задачу"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {accountingTasks.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    Нет активных поручений для бухгалтерии. Главный бухгалтер может создать задачу с помощью кнопки выше.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 3. Оформление доверенностей формы Д-1 на получение ТМЦ */}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <div>
@@ -596,6 +865,116 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
                   style={{ padding: '8px 22px', background: '#8b5cf6', color: '#fff', fontWeight: 700, margin: 0 }}
                 >
                   {isSubmittingPoa ? 'Сохранение...' : 'Зарегистрировать доверенность'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ПОСТАНОВКА ЗАДАЧИ ГЛАВНЫМ БУХГАЛТЕРОМ */}
+      {isTaskModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="card" style={{ maxWidth: '580px', width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                📋 Новое поручение бухгалтеру
+              </h3>
+              <button onClick={() => setIsTaskModalOpen(false)} className="inline-btn" style={{ padding: '4px 10px' }}>✕</button>
+            </div>
+
+            <form onSubmit={handleCreateAccountingTask} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Проект */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Проект / Направление *</label>
+                <select
+                  className="form-select"
+                  value={taskProjectId}
+                  onChange={e => setTaskProjectId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Выберите проект --</option>
+                  {projects?.map((p: any) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.status})</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Назначить бухгалтера */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Кому поручить (Бухгалтер-исполнитель) *</label>
+                <select
+                  className="form-select"
+                  value={taskAssigneeId}
+                  onChange={e => setTaskAssigneeId(e.target.value)}
+                  required
+                >
+                  <option value="">-- Выберите бухгалтера --</option>
+                  {accountants.map((u: any) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} — {u.title || (u.role === 'CHIEF_ACCOUNTANT' ? 'Главный бухгалтер' : 'Бухгалтер')} {u.telegramId ? '📱 (Telegram)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Название задачи */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Название поручения / задачи *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Например: Сформировать акт сверки с ТОО «Электрокомплект»"
+                  value={taskName}
+                  onChange={e => setTaskName(e.target.value)}
+                  required
+                />
+                
+                {/* Быстрые шаблоны */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                  {quickTemplates.map((tpl, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setTaskName(tpl.replace(/^[^\s]+\s/, ''))}
+                      className="inline-btn"
+                      style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.2)' }}
+                    >
+                      {tpl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Детали / Описание */}
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>Детали поручения, дедлайн, примечания</label>
+                <textarea
+                  className="form-textarea"
+                  rows={3}
+                  placeholder="Укажите сроки, ссылки на накладные, контактное лицо контрагента..."
+                  value={taskDescription}
+                  onChange={e => setTaskDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Кнопки */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsTaskModalOpen(false)}
+                  className="inline-btn"
+                  style={{ padding: '8px 16px' }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingTask}
+                  className="btn-submit"
+                  style={{ padding: '8px 22px', background: '#3b82f6', color: '#fff', fontWeight: 700, margin: 0 }}
+                >
+                  {isCreatingTask ? 'Назначение...' : 'Поручить задачу'}
                 </button>
               </div>
             </form>

@@ -938,7 +938,7 @@ export default function Home() {
                 📊 Дашборд
               </button>
             )}
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER') && (
+            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'CHIEF_ACCOUNTANT') && (
               <>
                 <button 
                   className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
@@ -958,7 +958,7 @@ export default function Home() {
               </>
             )}
 
-            {(currentUser?.role === 'ENGINEER' || currentUser?.role === 'ASSEMBLER') && (
+            {(currentUser?.role === 'ENGINEER' || currentUser?.role === 'ASSEMBLER' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'CHIEF_ACCOUNTANT') && (
               <button 
                 className={`nav-btn ${activeTab === 'my-tasks' ? 'active' : ''}`}
                 onClick={() => setActiveTab('my-tasks')}
@@ -1954,7 +1954,7 @@ export default function Home() {
 
           {activeTab === 'my-tasks' && (
             <section className="form-card">
-              <h2 className="form-title">📋 Мои задачи на производстве</h2>
+              <h2 className="form-title">📋 Мои задачи</h2>
               {projects.map(p => {
                 const myTasks = p.tasks.filter(t => t.assignees?.some(a => a.id === currentUser?.id));
                 if (myTasks.length === 0) return null;
