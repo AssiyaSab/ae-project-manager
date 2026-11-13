@@ -59,8 +59,16 @@ export async function POST(request: Request) {
     // Начальный статус
     const initialStatus = requestType === 'EXPENSE' ? 'PENDING_EXPENSE' : 'PENDING_APPROVAL';
 
-    // Безопасное определение requesterId (Мастер-аккаунт id=0 или гость id=999 -> null, чтобы не нарушать FK)
-    let finalRequesterId: number | null = requesterId ? Number(requesterId) : (user.id && user.id > 0 ? user.id : null);
+    // Безопасное определение requesterId (если Мастер-аккаунт id=0 -> привязываем к первому ADMIN в БД)
+    let finalRequesterId: number | null = requesterId ? Number(requesterId) : (user.id && user.id > 0 && user.id !== 999 ? user.id : null);
+    if (!finalRequesterId && user.role === 'ADMIN') {
+      const adminUser = await prisma.user.findFirst({
+        where: { role: 'ADMIN', isActive: true },
+        orderBy: { id: 'asc' },
+        select: { id: true }
+      });
+      if (adminUser) finalRequesterId = adminUser.id;
+    }
     if (finalRequesterId) {
       const userExists = await prisma.user.findUnique({ where: { id: finalRequesterId }, select: { id: true } });
       if (!userExists) finalRequesterId = null;

@@ -12,7 +12,18 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
   const monthStr = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'][creationDate.getMonth()];
   const year = creationDate.getFullYear();
 
-  const isApproved = ['APPROVED_FOR_PAYMENT', 'PAID_AND_ORDERED', 'DELIVERED', 'APPROVED', 'PAID'].includes(purchase.status);
+  const isApproved = [
+    'IN_PROCUREMENT',
+    'PENDING_PAYMENT_APPROVAL',
+    'APPROVED_FOR_PAYMENT',
+    'PAID_AND_ORDERED',
+    'POA_ISSUED',
+    'IN_TRANSIT',
+    'DELIVERED',
+    'APPROVED',
+    'PAID',
+    'PAID_EXPENSE',
+  ].includes(purchase.status);
 
   return (
     <div ref={ref} style={{ padding: '40px', fontFamily: '"Times New Roman", Times, serif', color: '#000', backgroundColor: '#fff', width: '210mm', minHeight: '297mm', boxSizing: 'border-box' }}>
@@ -22,9 +33,9 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
           <div style={{ fontWeight: 'bold' }}>Директору</div>
           <div style={{ fontWeight: 'bold' }}>ТОО «АзияЭнергоАвтоматика»</div>
           <div style={{ fontWeight: 'bold' }}>Быкаеву Канату Женисовичу</div>
-          <div style={{ marginTop: '10px' }}>от <span style={{ textDecoration: 'underline' }}>{purchase.requester?.name || '________________________'}</span></div>
+          <div style={{ marginTop: '10px' }}>от <span style={{ textDecoration: 'underline' }}>{purchase.requester?.name || 'Руководитель проекта (Администрация)'}</span></div>
           <div style={{ fontSize: '10px', textAlign: 'center', marginTop: '2px', marginRight: '50px' }}>(ФИО)</div>
-          <div style={{ marginTop: '5px' }}><span style={{ textDecoration: 'underline' }}>{purchase.requester?.title || '________________________'}</span></div>
+          <div style={{ marginTop: '5px' }}><span style={{ textDecoration: 'underline' }}>{purchase.requester?.title || 'ГИП / Администрация ТОО'}</span></div>
           <div style={{ fontSize: '10px', textAlign: 'center', marginTop: '2px', marginRight: '50px' }}>(должность)</div>
           <div style={{ marginTop: '10px' }}>« {day} » {monthStr} {year} г.</div>
         </div>
@@ -138,7 +149,7 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
         <div style={{ display: 'flex', alignItems: 'center' }}>
           Согласовано: __________________ / Быкаев К.Ж. /
           {isApproved && (
-            <img src="/images/signature.png" alt="Signature" style={{ width: '120px', height: '60px', position: 'absolute', left: '150px', top: '-10px', opacity: 0.9 }} />
+            <img src="/images/signature.png" alt="Signature" style={{ width: '120px', height: '60px', position: 'absolute', left: '105px', top: '-18px', opacity: 0.9 }} />
           )}
         </div>
         <div>
