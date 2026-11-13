@@ -122,6 +122,22 @@ model PurchaseRequest {
   task                Task?     @relation("SupplyTask", fields: [taskId], references: [id], onDelete: SetNull)
   paymentTaskId       Int?
   paymentTask         Task?     @relation("PaymentTask", fields: [paymentTaskId], references: [id], onDelete: SetNull)
+
+  // Позиции спецификации / закупаемых ТМЦ
+  items               PurchaseItem[]
+}
+
+model PurchaseItem {
+  id          Int             @id @default(autoincrement())
+  purchaseId  Int
+  purchase    PurchaseRequest @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  name        String
+  quantity    Float           @default(1)
+  unit        String          @default("шт")
+  price       Float           @default(0)
+  total       Float           @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 }
 
 model BusinessTrip {

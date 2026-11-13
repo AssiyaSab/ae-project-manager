@@ -15,6 +15,10 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [purchaseProject, setPurchaseProject] = useState('');
   const [purchaseFileUrl, setPurchaseFileUrl] = useState('');
+  const [purchaseItems, setPurchaseItems] = useState<{ name: string; quantity: number; unit: string; price?: number }[]>([]);
+  const [isParsingSpec, setIsParsingSpec] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filters State
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -90,16 +94,106 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
           title: purchaseTitle,
           amount: purchaseAmount ? Number(purchaseAmount) : 0,
           projectId: purchaseProject,
-          fileUrl: purchaseFileUrl
+          fileUrl: purchaseFileUrl,
+          items: purchaseItems.filter(item => item.name.trim().length > 0)
         })
       });
       setPurchaseTitle(''); 
       setPurchaseAmount(''); 
       setPurchaseProject(''); 
       setPurchaseFileUrl('');
+      setPurchaseItems([]);
+      setUploadedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       fetchData();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setUploadedFile(e.target.files[0]);
+    }
+  };
+
+  const handleParseSpec = async () => {
+    if (!uploadedFile && !purchaseFileUrl.trim()) {
+      alert('Пожалуйста, вставьте ссылку на Google Диск / Таблицу или прикрепите файл Excel/PDF для распознавания');
+      return;
+    }
+
+    setIsParsingSpec(true);
+    try {
+      let res: Response;
+      if (uploadedFile) {
+        const formData = new FormData();
+        formData.append('file', uploadedFile);
+        if (purchaseFileUrl.trim()) {
+          formData.append('googleDriveUrl', purchaseFileUrl.trim());
+        }
+        res = await fetch('/api/purchases/parse-spec', {
+          method: 'POST',
+          headers: {
+            'x-auth-password': pass || '',
+            'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+          },
+          body: formData
+        });
+      } else {
+        res = await fetch('/api/purchases/parse-spec', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-password': pass || '',
+            'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+          },
+          body: JSON.stringify({ googleDriveUrl: purchaseFileUrl.trim() })
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Ошибка при распознавании спецификации');
+        return;
+      }
+
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        setPurchaseItems(prev => [...prev, ...data.items]);
+        if (!purchaseTitle) {
+          const firstItem = data.items[0]?.name || 'ТМЦ';
+          setPurchaseTitle(`Закупка: ${firstItem.slice(0, 45)}${data.items.length > 1 ? ` (+${data.items.length - 1} поз.)` : ''}`);
+        }
+      } else {
+        alert('ИИ не обнаружил позиций ТМЦ в документе. Проверьте содержимое файла.');
+      }
+    } catch (err: any) {
+      console.error('handleParseSpec error:', err);
+      alert('Сбой при обращении к сервису распознавания: ' + (err?.message || 'Неизвестная ошибка'));
+    } finally {
+      setIsParsingSpec(false);
+    }
+  };
+
+  const handleAddItemRow = () => {
+    setPurchaseItems(prev => [...prev, { name: '', quantity: 1, unit: 'шт' }]);
+  };
+
+  const handleUpdateItemRow = (index: number, field: string, val: any) => {
+    setPurchaseItems(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: val };
+      return next;
+    });
+  };
+
+  const handleRemoveItemRow = (index: number) => {
+    setPurchaseItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleClearItems = () => {
+    if (purchaseItems.length === 0 || window.confirm('Очистить все распознанные позиции?')) {
+      setPurchaseItems([]);
     }
   };
 
@@ -415,22 +509,193 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             />
           </div>
 
-          <div style={{ flex: '1 1 200px' }}>
+          <div style={{ flex: '2 1 320px' }}>
             <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-              {purchaseType === 'INVOICE' ? 'Ссылка на спецификацию/каталог (опц.)' : 'Ссылка на скан/чек (опц.)'}
+              {purchaseType === 'INVOICE' ? 'Ссылка на спецификацию / Google Диск (опц.)' : 'Ссылка на скан/чек (опц.)'}
             </label>
-            <input className="form-input" placeholder="Google Drive / ссылка" value={purchaseFileUrl} onChange={e => setPurchaseFileUrl(e.target.value)} />
+            <input 
+              className="form-input" 
+              placeholder={purchaseType === 'INVOICE' ? 'https://drive.google.com/...' : 'Google Drive / ссылка'} 
+              value={purchaseFileUrl} 
+              onChange={e => setPurchaseFileUrl(e.target.value)} 
+            />
+            {purchaseType === 'INVOICE' && (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  style={{ display: 'none' }} 
+                  accept=".xlsx,.xls,.csv,.pdf,image/*" 
+                  onChange={handleFileChange} 
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-btn"
+                  style={{ 
+                    fontSize: '0.75rem', 
+                    padding: '5px 10px', 
+                    background: uploadedFile ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.08)', 
+                    color: uploadedFile ? '#34d399' : '#e2e8f0', 
+                    border: uploadedFile ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: '6px'
+                  }}
+                  title="Выбрать файл спецификации (Excel, CSV, PDF) с компьютера"
+                >
+                  {uploadedFile ? `📎 ${uploadedFile.name.length > 22 ? uploadedFile.name.slice(0, 20) + '...' : uploadedFile.name}` : '📎 Загрузить файл Excel/PDF'}
+                </button>
+                {uploadedFile && (
+                  <button
+                    type="button"
+                    onClick={() => { setUploadedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                    style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.9rem', padding: '0 4px' }}
+                    title="Удалить прикрепленный файл"
+                  >
+                    ✕
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleParseSpec}
+                  disabled={isParsingSpec || (!uploadedFile && !purchaseFileUrl.trim())}
+                  className="inline-btn"
+                  style={{ 
+                    fontSize: '0.75rem', 
+                    padding: '5px 12px', 
+                    background: isParsingSpec ? '#475569' : 'linear-gradient(135deg, #7c3aed, #2563eb)', 
+                    color: '#fff', 
+                    fontWeight: 600,
+                    borderRadius: '6px',
+                    opacity: (!uploadedFile && !purchaseFileUrl.trim()) ? 0.45 : 1,
+                    cursor: (isParsingSpec || (!uploadedFile && !purchaseFileUrl.trim())) ? 'not-allowed' : 'pointer',
+                    boxShadow: (!uploadedFile && !purchaseFileUrl.trim()) ? 'none' : '0 2px 8px rgba(124, 58, 237, 0.3)'
+                  }}
+                  title="Распознать позиции спецификации с помощью ИИ (Gemini)"
+                >
+                  {isParsingSpec ? '⏳ Распознавание ИИ...' : '✨ Заполнить список из файла'}
+                </button>
+              </div>
+            )}
           </div>
 
-          <div style={{ flex: '0 1 160px', display: 'flex', alignItems: 'flex-end' }}>
+          <div style={{ flex: '0 1 160px', display: 'flex', alignItems: 'flex-start', marginTop: '22px' }}>
             <button 
               className="btn-submit" 
               type="submit" 
-              style={{ width: '100%', height: '42px', background: purchaseType === 'INVOICE' ? '#3b82f6' : '#f59e0b', color: '#fff' }}
+              style={{ width: '100%', height: '42px', background: purchaseType === 'INVOICE' ? '#3b82f6' : '#f59e0b', color: '#fff', fontWeight: 600 }}
             >
               {purchaseType === 'INVOICE' ? '🚀 В снабжение' : '💰 На подотчет'}
             </button>
           </div>
+
+          {/* Interactive table of PurchaseItem */}
+          {purchaseType === 'INVOICE' && (
+            <div style={{ 
+              flex: '1 1 100%', 
+              marginTop: '15px', 
+              padding: '16px', 
+              background: 'rgba(15, 23, 42, 0.65)', 
+              border: '1px solid rgba(148, 163, 184, 0.15)', 
+              borderRadius: '8px' 
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📋 Спецификация позиций ТМЦ</span>
+                  <span style={{ fontSize: '0.75rem', background: '#3b82f6', color: '#fff', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>
+                    {purchaseItems.length} поз.
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={handleAddItemRow}
+                    className="inline-btn"
+                    style={{ fontSize: '0.75rem', padding: '4px 10px', background: '#2563eb', color: '#fff', borderRadius: '6px' }}
+                  >
+                    ➕ Добавить позицию
+                  </button>
+                  {purchaseItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearItems}
+                      className="inline-btn"
+                      style={{ fontSize: '0.75rem', padding: '4px 10px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px' }}
+                    >
+                      Очистить
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {purchaseItems.length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '16px', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '6px' }}>
+                  Список позиций пока пуст. Загрузите файл Excel/PDF, вставьте ссылку на Google Диск и нажмите <strong>«✨ Заполнить список из файла»</strong>, либо добавьте позиции кнопкой <strong>«➕ Добавить позицию»</strong>.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', maxHeight: '350px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.12)', color: 'var(--text-muted)', textAlign: 'left' }}>
+                        <th style={{ padding: '8px 6px', width: '35px', textAlign: 'center' }}>№</th>
+                        <th style={{ padding: '8px 6px' }}>Наименование и характеристики *</th>
+                        <th style={{ padding: '8px 6px', width: '100px', textAlign: 'center' }}>Кол-во *</th>
+                        <th style={{ padding: '8px 6px', width: '90px', textAlign: 'center' }}>Ед. изм.</th>
+                        <th style={{ padding: '8px 6px', width: '40px', textAlign: 'center' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {purchaseItems.map((item, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <td style={{ padding: '6px', textAlign: 'center', color: 'var(--text-muted)' }}>{idx + 1}</td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <input
+                              className="form-input"
+                              style={{ width: '100%', fontSize: '0.85rem', padding: '5px 8px' }}
+                              value={item.name}
+                              onChange={e => handleUpdateItemRow(idx, 'name', e.target.value)}
+                              placeholder="Наименование ТМЦ / артикул"
+                              required
+                            />
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.01"
+                              className="form-input"
+                              style={{ width: '100%', fontSize: '0.85rem', padding: '5px 6px', textAlign: 'center' }}
+                              value={item.quantity}
+                              onChange={e => handleUpdateItemRow(idx, 'quantity', parseFloat(e.target.value) || 1)}
+                              required
+                            />
+                          </td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <input
+                              className="form-input"
+                              style={{ width: '100%', fontSize: '0.85rem', padding: '5px 6px', textAlign: 'center' }}
+                              value={item.unit}
+                              onChange={e => handleUpdateItemRow(idx, 'unit', e.target.value)}
+                              placeholder="шт"
+                            />
+                          </td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItemRow(idx)}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1rem' }}
+                              title="Удалить строку"
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </form>
 
         {/* FILTERS */}
@@ -559,6 +824,24 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                     {p.project && (
                       <div style={{ fontSize: '0.8rem', color: '#38bdf8', marginTop: '2px' }}>
                         Проект: {p.project.name}
+                      </div>
+                    )}
+
+                    {p.items && p.items.length > 0 && (
+                      <div style={{ marginTop: '5px' }}>
+                        <span style={{ 
+                          fontSize: '0.75rem', 
+                          background: 'rgba(56, 189, 248, 0.1)', 
+                          color: '#38bdf8', 
+                          border: '1px solid rgba(56, 189, 248, 0.25)', 
+                          padding: '2px 8px', 
+                          borderRadius: '10px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          📦 Спецификация: <strong>{p.items.length} поз.</strong>
+                        </span>
                       </div>
                     )}
 

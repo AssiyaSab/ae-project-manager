@@ -22,6 +22,9 @@ export async function GET(request: Request) {
         requester: true,
         supplyUser: true,
         receivedByUser: true,
+        items: {
+          orderBy: { id: 'asc' }
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -39,7 +42,7 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    let { type, title, amount, projectId, fileUrl, requesterId } = body;
+    let { type, title, amount, projectId, fileUrl, requesterId, items } = body;
     
     const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(user.role);
     if (!isManagement) {
@@ -65,8 +68,17 @@ export async function POST(request: Request) {
         fileUrl: fileUrl || null,
         status: initialStatus,
         requesterId: requesterId ? Number(requesterId) : user.id,
+        items: Array.isArray(items) && items.length > 0 ? {
+          create: items.map((it: any) => ({
+            name: String(it.name || '').trim(),
+            quantity: Number(it.quantity) || 1,
+            unit: String(it.unit || 'шт').trim(),
+            price: Number(it.price) || 0,
+            total: Number(it.total) || ((Number(it.quantity) || 1) * (Number(it.price) || 0)),
+          }))
+        } : undefined
       },
-      include: { project: true, requester: true, supplyUser: true }
+      include: { project: true, requester: true, supplyUser: true, items: true }
     });
 
     // Telegram уведомление
@@ -76,12 +88,20 @@ export async function POST(request: Request) {
       });
       
       const typeLabel = requestType === 'EXPENSE' ? '🧾 Срочный подотчет / чек' : '🏢 Заявка на закупку (Счет на ТОО)';
+      let itemsListStr = '';
+      if (purchase.items && purchase.items.length > 0) {
+        itemsListStr = `*Позиции (${purchase.items.length}):*\n` +
+          purchase.items.slice(0, 5).map((it, idx) => `• ${it.name} — ${it.quantity} ${it.unit}`).join('\n') +
+          (purchase.items.length > 5 ? `\n_...и еще ${purchase.items.length - 5} поз._\n\n` : '\n\n');
+      }
+
       const message = `🛒 *Новая заявка в снабжение*\n\n` +
         `*Тип:* ${typeLabel}\n` +
         `*Наименование:* ${purchase.title}\n` +
         (numAmount > 0 ? `*Ориентировочная сумма:* ${numAmount.toLocaleString('ru-RU')} ₸\n` : '') +
         `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
         `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Сотрудник'}\n\n` +
+        itemsListStr +
         `⏳ Требуется первичное согласование потребности Директором/Руководителем.`;
 
       const initialKeyboard = {
@@ -135,7 +155,8 @@ export async function PATCH(request: Request) {
       poaNumber,
       poaDate,
       poaFileUrl,
-      poaIssuedTo
+      poaIssuedTo,
+      items
     } = body;
     
     if (!id) {
@@ -206,10 +227,26 @@ export async function PATCH(request: Request) {
       data.receivedByUserId = user.id;
     }
 
+    if (Array.isArray(items)) {
+      await prisma.purchaseItem.deleteMany({ where: { purchaseId: Number(id) } });
+      if (items.length > 0) {
+        await prisma.purchaseItem.createMany({
+          data: items.map((it: any) => ({
+            purchaseId: Number(id),
+            name: String(it.name || '').trim(),
+            quantity: Number(it.quantity) || 1,
+            unit: String(it.unit || 'шт').trim(),
+            price: Number(it.price) || 0,
+            total: Number(it.total) || ((Number(it.quantity) || 1) * (Number(it.price) || 0)),
+          }))
+        });
+      }
+    }
+
     const updated = await prisma.purchaseRequest.update({
       where: { id: Number(id) },
       data,
-      include: { project: true, requester: true, supplyUser: true, receivedByUser: true }
+      include: { project: true, requester: true, supplyUser: true, receivedByUser: true, items: { orderBy: { id: 'asc' } } }
     });
 
     // Telegram-уведомления по цепочке жизненного цикла
