@@ -232,6 +232,7 @@ export default function Home() {
   const handleLogout = () => {
     localStorage.removeItem('ae_current_user');
     localStorage.removeItem('ae_admin_password');
+    localStorage.removeItem('ae_auth_login');
     setCurrentUser(null);
     setAdminPassword('');
     setShowLoginModal(true);
@@ -917,8 +918,8 @@ export default function Home() {
     <div className="app-container">
       {/* 1. GIP Dashboard Panel */}
       <div className="dashboard-panel">
-        <header className="dashboard-header">
-          <div style={{ display: 'flex', alignItems: 'center', height: '45px' }}>
+        <header className="dashboard-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: '40px', flexShrink: 0 }}>
             <img 
               src="/logo.png" 
               alt="АзияЭнергоАвтоматика" 
@@ -929,7 +930,7 @@ export default function Home() {
               }} 
             />
           </div>
-          <nav className="dashboard-nav">
+          <nav className="dashboard-nav" style={{ flexWrap: 'wrap', flex: '1 1 auto' }}>
             {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
               <button 
                 className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
@@ -1015,20 +1016,21 @@ export default function Home() {
           </nav>
           
           {currentUser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
               <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Директор' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'CHIEF_ACCOUNTANT' ? 'Главный бухгалтер' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
                 style={{
-                  background: '#f43f5e15',
-                  color: '#f43f5e',
-                  border: '1px solid #f43f5e30',
-                  padding: '4px 10px',
+                  background: '#f43f5e20',
+                  color: '#fb7185',
+                  border: '1px solid #f43f5e45',
+                  padding: '5px 12px',
                   borderRadius: '6px',
                   fontSize: '12px',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
-                  fontWeight: 600
+                  fontWeight: 600,
+                  flexShrink: 0
                 }}
               >
                 Выйти 🚪
