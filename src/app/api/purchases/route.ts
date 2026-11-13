@@ -59,6 +59,13 @@ export async function POST(request: Request) {
     // Начальный статус
     const initialStatus = requestType === 'EXPENSE' ? 'PENDING_EXPENSE' : 'PENDING_APPROVAL';
 
+    // Безопасное определение requesterId (Мастер-аккаунт id=0 или гость id=999 -> null, чтобы не нарушать FK)
+    let finalRequesterId: number | null = requesterId ? Number(requesterId) : (user.id && user.id > 0 ? user.id : null);
+    if (finalRequesterId) {
+      const userExists = await prisma.user.findUnique({ where: { id: finalRequesterId }, select: { id: true } });
+      if (!userExists) finalRequesterId = null;
+    }
+
     const purchase = await prisma.purchaseRequest.create({
       data: {
         type: requestType,
@@ -67,7 +74,7 @@ export async function POST(request: Request) {
         projectId: Number(projectId),
         fileUrl: fileUrl || null,
         status: initialStatus,
-        requesterId: requesterId ? Number(requesterId) : user.id,
+        requesterId: finalRequesterId,
         items: Array.isArray(items) && items.length > 0 ? {
           create: items.map((it: any) => ({
             name: String(it.name || '').trim(),
@@ -224,7 +231,7 @@ export async function PATCH(request: Request) {
     }
     if (status === 'DELIVERED') {
       data.deliveredAt = new Date();
-      data.receivedByUserId = user.id;
+      data.receivedByUserId = user.id && user.id > 0 && user.id !== 999 ? user.id : null;
     }
 
     if (Array.isArray(items)) {

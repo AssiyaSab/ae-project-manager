@@ -17,6 +17,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchaseFileUrl, setPurchaseFileUrl] = useState('');
   const [purchaseItems, setPurchaseItems] = useState<{ name: string; quantity: number; unit: string; price?: number }[]>([]);
   const [isParsingSpec, setIsParsingSpec] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -81,8 +82,9 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
       alert('Пожалуйста, выберите проект');
       return;
     }
+    setIsSubmitting(true);
     try {
-      await fetch('/api/purchases', {
+      const res = await fetch('/api/purchases', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json', 
@@ -98,16 +100,25 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
           items: purchaseItems.filter(item => item.name.trim().length > 0)
         })
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || 'Не удалось создать заявку. Проверьте заполненные поля.');
+        return;
+      }
       setPurchaseTitle(''); 
       setPurchaseAmount(''); 
       setPurchaseProject(''); 
       setPurchaseFileUrl('');
       setPurchaseItems([]);
       setUploadedFile(null);
+      setStatusFilter('ALL');
       if (fileInputRef.current) fileInputRef.current.value = '';
-      fetchData();
-    } catch (e) {
+      await fetchData();
+    } catch (e: any) {
       console.error(e);
+      alert('Ошибка сети при создании заявки: ' + (e?.message || 'Неизвестная ошибка'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -582,9 +593,17 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             <button 
               className="btn-submit" 
               type="submit" 
-              style={{ width: '100%', height: '42px', background: purchaseType === 'INVOICE' ? '#3b82f6' : '#f59e0b', color: '#fff', fontWeight: 600 }}
+              disabled={isSubmitting}
+              style={{ 
+                width: '100%', 
+                height: '42px', 
+                background: isSubmitting ? '#475569' : (purchaseType === 'INVOICE' ? '#3b82f6' : '#f59e0b'), 
+                color: '#fff', 
+                fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer'
+              }}
             >
-              {purchaseType === 'INVOICE' ? '🚀 В снабжение' : '💰 На подотчет'}
+              {isSubmitting ? '⏳ Сохранение...' : (purchaseType === 'INVOICE' ? '🚀 В снабжение' : '💰 На подотчет')}
             </button>
           </div>
 
