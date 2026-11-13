@@ -6,6 +6,32 @@ import mammoth from 'mammoth';
 
 export const dynamic = 'force-dynamic';
 
+const CANDIDATE_MODELS = [
+  process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+  'gemini-3-flash-preview',
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+];
+
+async function generateWithFallback(genAI: GoogleGenerativeAI, contents: string | (string | Part)[]): Promise<string> {
+  let lastErr: any = null;
+  for (const modelName of CANDIDATE_MODELS) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: 'application/json' },
+      });
+      const res = await model.generateContent(contents);
+      return res.response.text();
+    } catch (err: any) {
+      console.warn(`[parse-spec] Model ${modelName} failed:`, err?.message || err);
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('Все доступные модели Gemini временно недоступны.');
+}
+
 function extractGoogleDriveInfo(url: string): { type: 'spreadsheet' | 'document' | 'file'; id: string } | null {
   if (!url) return null;
   const cleanUrl = url.trim();
@@ -238,23 +264,7 @@ export async function POST(request: Request) {
       }
 
       const prompt = `${systemPrompt}\n\nСодержимое документа спецификации (таблица Excel/CSV):\n${sheetText.slice(0, 60000)}`;
-
-      try {
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await model.generateContent(prompt);
-        responseText = res.response.text();
-      } catch (e: any) {
-        console.warn('gemini-2.5-flash failed, trying gemini-1.5-flash fallback:', e?.message);
-        const fallbackModel = genAI.getGenerativeModel({
-          model: 'gemini-1.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await fallbackModel.generateContent(prompt);
-        responseText = res.response.text();
-      }
+      responseText = await generateWithFallback(genAI, prompt);
     } else if (isWord) {
       // --- WORD (.docx / .doc) ---
       let docText = '';
@@ -271,43 +281,12 @@ export async function POST(request: Request) {
       }
 
       const prompt = `${systemPrompt}\n\nСодержимое документа спецификации (Word):\n${docText.slice(0, 60000)}`;
-
-      try {
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await model.generateContent(prompt);
-        responseText = res.response.text();
-      } catch (e: any) {
-        console.warn('gemini-2.5-flash failed, trying gemini-1.5-flash fallback:', e?.message);
-        const fallbackModel = genAI.getGenerativeModel({
-          model: 'gemini-1.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await fallbackModel.generateContent(prompt);
-        responseText = res.response.text();
-      }
+      responseText = await generateWithFallback(genAI, prompt);
     } else if (mimeType === 'text/plain') {
       // --- PLAIN TEXT (например, Google Docs export) ---
       const plainText = buffer.toString('utf-8');
       const prompt = `${systemPrompt}\n\nСодержимое документа:\n${plainText.slice(0, 60000)}`;
-
-      try {
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await model.generateContent(prompt);
-        responseText = res.response.text();
-      } catch (e: any) {
-        const fallbackModel = genAI.getGenerativeModel({
-          model: 'gemini-1.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await fallbackModel.generateContent(prompt);
-        responseText = res.response.text();
-      }
+      responseText = await generateWithFallback(genAI, prompt);
     } else {
       // --- PDF OR PHOTO / IMAGE ---
       let detectedMime = mimeType;
@@ -339,22 +318,7 @@ export async function POST(request: Request) {
         ? 'Извлеки из этого фото/скана (чек, счет, накладная, шильдик, список от руки или распечатка) перечень товаров/материалов. Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл, кг и т.д.). Игнорируй шапки таблиц, реквизиты, подписи и пустые строки.'
         : systemPrompt;
 
-      try {
-        const model = genAI.getGenerativeModel({
-          model: 'gemini-2.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await model.generateContent([filePart, visionPrompt]);
-        responseText = res.response.text();
-      } catch (e: any) {
-        console.warn('gemini-2.5-flash failed, trying gemini-1.5-flash fallback:', e?.message);
-        const fallbackModel = genAI.getGenerativeModel({
-          model: 'gemini-1.5-flash',
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const res = await fallbackModel.generateContent([filePart, visionPrompt]);
-        responseText = res.response.text();
-      }
+      responseText = await generateWithFallback(genAI, [filePart, visionPrompt]);
     }
 
     let parsed: any = null;

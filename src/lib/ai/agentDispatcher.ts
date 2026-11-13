@@ -98,10 +98,11 @@ export async function processAiMessage(
     `• Список доступных проектов в компании: ${projectListStr || 'Нет проектов'}\n\n` +
     (cleanText ? `Сообщение от пользователя:\n"${cleanText}"` : 'Пользователь прикрепил документ / фотографию.');
 
-  // Try candidate models starting with gemini-2.5-flash
+  // Try candidate models starting with gemini-3.5-flash
   const candidateModels = [
-    process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    process.env.GEMINI_MODEL || 'gemini-3.5-flash',
     'gemini-3-flash-preview',
+    'gemini-3.5-flash-lite',
     'gemini-3.8-flash',
     'gemini-flash-latest',
   ];

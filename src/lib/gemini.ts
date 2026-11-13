@@ -26,32 +26,42 @@ export async function analyzeReport(text: string): Promise<AnalysisResult> {
 
   // Check if real Gemini API key is available
   if (genAI) {
-    try {
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-1.5-flash',
-        generationConfig: { responseMimeType: 'application/json' },
-      });
+    const candidateModels = [
+      process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.5-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+    ];
 
-      const prompt = `
-        Ты — ИИ-ассистент в системе управления проектами ТОО «АзияЭнергоАвтоматика».
-        Проанализируй текстовое сообщение инженера с объекта и верни структурированный JSON.
-        
-        Текст сообщения: "${text}"
-        
-        Формат ответа JSON:
-        {
-          "isBlock": true/false (true, если инженер сообщает о критической проблеме, нехватке материалов, задержках, срывах или о том, что работа остановилась/заблокирована),
-          "summary": "Краткая суть проблемы на русском языке до 10 слов" (если isBlock true; иначе пустая строка),
-          "status": "PENDING" | "IN_PROGRESS" | "OTK" | "BLOCKED" | "DONE" | null (определи, просит ли инженер изменить статус задачи. Например: "начал сборку" -> "IN_PROGRESS", "шкаф собран, передаю на проверку/ОТК" -> "OTK", "закончил пусконаладку/все готово" -> "DONE", "стоим из-за комплектующих/проблема" -> "BLOCKED". Если смены статуса нет, верни null),
-          "explanation": "Краткое объяснение решения на русском языке"
-        }
-      `;
+    for (const modelName of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: 'application/json' },
+        });
 
-      const response = await model.generateContent(prompt);
-      const responseText = response.response.text();
-      return JSON.parse(responseText) as AnalysisResult;
-    } catch (error) {
-      console.error('Gemini API call failed, falling back to local parsing:', error);
+        const prompt = `
+          Ты — ИИ-ассистент в системе управления проектами ТОО «АзияЭнергоАвтоматика».
+          Проанализируй текстовое сообщение инженера с объекта и верни структурированный JSON.
+          
+          Текст сообщения: "${text}"
+          
+          Формат ответа JSON:
+          {
+            "isBlock": true/false (true, если инженер сообщает о критической проблеме, нехватке материалов, задержках, срывах или о том, что работа остановилась/заблокирована),
+            "summary": "Краткая суть проблемы на русском языке до 10 слов" (если isBlock true; иначе пустая строка),
+            "status": "PENDING" | "IN_PROGRESS" | "OTK" | "BLOCKED" | "DONE" | null (определи, просит ли инженер изменить статус задачи. Например: "начал сборку" -> "IN_PROGRESS", "шкаф собран, передаю на проверку/ОТК" -> "OTK", "закончил пусконаладку/все готово" -> "DONE", "стоим из-за комплектующих/проблема" -> "BLOCKED". Если смены статуса нет, верни null),
+            "explanation": "Краткое объяснение решения на русском языке"
+          }
+        `;
+
+        const response = await model.generateContent(prompt);
+        const responseText = response.response.text();
+        return JSON.parse(responseText) as AnalysisResult;
+      } catch (error) {
+        console.warn(`Gemini model ${modelName} failed, trying next candidate:`, error);
+      }
     }
   }
 
