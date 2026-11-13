@@ -515,7 +515,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             </label>
             <input 
               className="form-input" 
-              placeholder={purchaseType === 'INVOICE' ? 'https://drive.google.com/...' : 'Google Drive / ссылка'} 
+              placeholder={purchaseType === 'INVOICE' ? 'https://drive.google.com/... или docs.google.com/...' : 'Google Drive / ссылка'} 
               value={purchaseFileUrl} 
               onChange={e => setPurchaseFileUrl(e.target.value)} 
             />
@@ -525,7 +525,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                   type="file" 
                   ref={fileInputRef} 
                   style={{ display: 'none' }} 
-                  accept=".xlsx,.xls,.csv,.pdf,image/*" 
+                  accept=".xlsx,.xls,.csv,.docx,.doc,.pdf,image/*,.jpg,.jpeg,.png,.webp,.bmp" 
                   onChange={handleFileChange} 
                 />
                 <button
@@ -540,9 +540,9 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                     border: uploadedFile ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.15)',
                     borderRadius: '6px'
                   }}
-                  title="Выбрать файл спецификации (Excel, CSV, PDF) с компьютера"
+                  title="Выбрать файл (Excel, Word, PDF или фото) с компьютера/смартфона"
                 >
-                  {uploadedFile ? `📎 ${uploadedFile.name.length > 22 ? uploadedFile.name.slice(0, 20) + '...' : uploadedFile.name}` : '📎 Загрузить файл Excel/PDF'}
+                  {uploadedFile ? `📎 ${uploadedFile.name.length > 22 ? uploadedFile.name.slice(0, 20) + '...' : uploadedFile.name}` : '📎 Загрузить Excel / Word / PDF / Фото'}
                 </button>
                 {uploadedFile && (
                   <button
@@ -629,7 +629,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
 
               {purchaseItems.length === 0 ? (
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '16px', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: '6px' }}>
-                  Список позиций пока пуст. Загрузите файл Excel/PDF, вставьте ссылку на Google Диск и нажмите <strong>«✨ Заполнить список из файла»</strong>, либо добавьте позиции кнопкой <strong>«➕ Добавить позицию»</strong>.
+                  Список позиций пока пуст. Загрузите файл Excel, Word, PDF или фото документа/чека (либо вставьте ссылку на Google Диск / Таблицу) и нажмите <strong>«✨ Заполнить список из файла»</strong>, либо добавьте позиции кнопкой <strong>«➕ Добавить позицию»</strong>.
                 </div>
               ) : (
                 <div style={{ overflowX: 'auto', maxHeight: '350px' }}>

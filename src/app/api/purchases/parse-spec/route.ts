@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { validateAuth } from '@/lib/auth';
 import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 export const dynamic = 'force-dynamic';
 
-function extractGoogleDriveInfo(url: string): { type: 'spreadsheet' | 'file'; id: string } | null {
+function extractGoogleDriveInfo(url: string): { type: 'spreadsheet' | 'document' | 'file'; id: string } | null {
   if (!url) return null;
   const cleanUrl = url.trim();
 
@@ -15,19 +16,25 @@ function extractGoogleDriveInfo(url: string): { type: 'spreadsheet' | 'file'; id
     return { type: 'spreadsheet', id: sheetMatch[1] };
   }
 
-  // 2. Google Drive File: drive.google.com/file/d/{ID}
+  // 2. Google Docs: docs.google.com/document/d/{ID}
+  const docMatch = cleanUrl.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  if (docMatch && docMatch[1]) {
+    return { type: 'document', id: docMatch[1] };
+  }
+
+  // 3. Google Drive File: drive.google.com/file/d/{ID}
   const fileMatch = cleanUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (fileMatch && fileMatch[1]) {
     return { type: 'file', id: fileMatch[1] };
   }
 
-  // 3. ID query param: ?id={ID} or &id={ID}
+  // 4. ID query param: ?id={ID} or &id={ID}
   const idMatch = cleanUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idMatch && idMatch[1]) {
     return { type: 'file', id: idMatch[1] };
   }
 
-  // 4. Generic /d/{ID}
+  // 5. Generic /d/{ID}
   const genericMatch = cleanUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (genericMatch && genericMatch[1]) {
     return { type: 'file', id: genericMatch[1] };
@@ -36,11 +43,15 @@ function extractGoogleDriveInfo(url: string): { type: 'spreadsheet' | 'file'; id
   return null;
 }
 
-async function fetchGoogleDriveContent(info: { type: 'spreadsheet' | 'file'; id: string }) {
-  // If it's a spreadsheet, export format=csv gets clean tabular data
-  const downloadUrl = info.type === 'spreadsheet'
-    ? `https://docs.google.com/spreadsheets/d/${info.id}/export?format=csv`
-    : `https://drive.google.com/uc?export=download&id=${info.id}`;
+async function fetchGoogleDriveContent(info: { type: 'spreadsheet' | 'document' | 'file'; id: string }) {
+  let downloadUrl = '';
+  if (info.type === 'spreadsheet') {
+    downloadUrl = `https://docs.google.com/spreadsheets/d/${info.id}/export?format=csv`;
+  } else if (info.type === 'document') {
+    downloadUrl = `https://docs.google.com/document/d/${info.id}/export?format=txt`;
+  } else {
+    downloadUrl = `https://drive.google.com/uc?export=download&id=${info.id}`;
+  }
 
   const res = await fetch(downloadUrl, {
     headers: {
@@ -67,11 +78,17 @@ async function fetchGoogleDriveContent(info: { type: 'spreadsheet' | 'file'; id:
   }
 
   let mimeType = contentType.split(';')[0].trim();
+  let filename = 'drive_file';
+
   if (info.type === 'spreadsheet') {
     mimeType = 'text/csv';
+    filename = 'export.csv';
+  } else if (info.type === 'document') {
+    mimeType = 'text/plain';
+    filename = 'document.txt';
   }
 
-  return { buffer, mimeType, filename: info.type === 'spreadsheet' ? 'export.csv' : 'drive_file' };
+  return { buffer, mimeType, filename };
 }
 
 function isExcelOrCsv(mimeType: string, filename: string): boolean {
@@ -87,6 +104,41 @@ function isExcelOrCsv(mimeType: string, filename: string): boolean {
     mimeType === 'application/vnd.ms-excel' ||
     mimeType === 'text/csv'
   ) {
+    return true;
+  }
+  return false;
+}
+
+function isWordDocument(mimeType: string, filename: string): boolean {
+  const lower = (filename || '').toLowerCase();
+  if (lower.endsWith('.docx') || lower.endsWith('.doc')) {
+    return true;
+  }
+  if (
+    mimeType.includes('wordprocessingml') ||
+    mimeType.includes('msword') ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mimeType === 'application/msword'
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isImageFile(mimeType: string, filename: string): boolean {
+  const lower = (filename || '').toLowerCase();
+  if (
+    lower.endsWith('.jpg') ||
+    lower.endsWith('.jpeg') ||
+    lower.endsWith('.png') ||
+    lower.endsWith('.webp') ||
+    lower.endsWith('.bmp') ||
+    lower.endsWith('.gif') ||
+    lower.endsWith('.heic')
+  ) {
+    return true;
+  }
+  if (mimeType.startsWith('image/')) {
     return true;
   }
   return false;
@@ -139,7 +191,7 @@ export async function POST(request: Request) {
       const gInfo = extractGoogleDriveInfo(googleDriveUrl);
       if (!gInfo) {
         return NextResponse.json(
-          { error: 'Неверный формат ссылки на Google Диск / Таблицу. Поддерживаются ссылки вида drive.google.com/file/d/... и docs.google.com/spreadsheets/d/...' },
+          { error: 'Неверный формат ссылки на Google Диск / Документ / Таблицу. Поддерживаются ссылки вида drive.google.com/file/d/..., docs.google.com/spreadsheets/d/... и docs.google.com/document/d/...' },
           { status: 400 }
         );
       }
@@ -151,18 +203,21 @@ export async function POST(request: Request) {
 
     if (!buffer || buffer.length === 0) {
       return NextResponse.json(
-        { error: 'Файл или ссылка на Google Диск не предоставлены, либо файл пуст.' },
+        { error: 'Файл или ссылка на документ не предоставлены, либо файл пуст.' },
         { status: 400 }
       );
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const systemPrompt = 'Извлеки из документа список закупаемых товаров/материалов. Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл и т.д.). Игнорируй шапки таблиц, подписи и пустые строки.';
+    const systemPrompt = 'Извлеки из документа/фотографии список закупаемых товаров/материалов (спецификация, чек, накладная, ведомость потребности, перечень оборудования). Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл и т.д.). Игнорируй шапки таблиц, реквизиты, подписи и пустые строки.';
 
     let responseText = '';
     const isSpreadsheet = isExcelOrCsv(mimeType, filename);
+    const isWord = isWordDocument(mimeType, filename);
+    const isImage = isImageFile(mimeType, filename);
 
     if (isSpreadsheet) {
+      // --- EXCEL / CSV ---
       let sheetText = '';
       try {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -182,7 +237,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Не удалось прочитать содержимое таблицы. Файл пуст.' }, { status: 400 });
       }
 
-      const prompt = `${systemPrompt}\n\nСодержимое документа спецификации:\n${sheetText.slice(0, 60000)}`;
+      const prompt = `${systemPrompt}\n\nСодержимое документа спецификации (таблица Excel/CSV):\n${sheetText.slice(0, 60000)}`;
 
       try {
         const model = genAI.getGenerativeModel({
@@ -200,8 +255,61 @@ export async function POST(request: Request) {
         const res = await fallbackModel.generateContent(prompt);
         responseText = res.response.text();
       }
+    } else if (isWord) {
+      // --- WORD (.docx / .doc) ---
+      let docText = '';
+      try {
+        const result = await mammoth.extractRawText({ buffer });
+        docText = result.value || '';
+      } catch (docErr) {
+        console.warn('Mammoth extraction failed, fallback to raw string extraction:', docErr);
+        docText = buffer.toString('utf-8');
+      }
+
+      if (!docText.trim()) {
+        return NextResponse.json({ error: 'Не удалось извлечь текст из Word-документа. Файл пуст или защищен.' }, { status: 400 });
+      }
+
+      const prompt = `${systemPrompt}\n\nСодержимое документа спецификации (Word):\n${docText.slice(0, 60000)}`;
+
+      try {
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const res = await model.generateContent(prompt);
+        responseText = res.response.text();
+      } catch (e: any) {
+        console.warn('gemini-2.5-flash failed, trying gemini-1.5-flash fallback:', e?.message);
+        const fallbackModel = genAI.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const res = await fallbackModel.generateContent(prompt);
+        responseText = res.response.text();
+      }
+    } else if (mimeType === 'text/plain') {
+      // --- PLAIN TEXT (например, Google Docs export) ---
+      const plainText = buffer.toString('utf-8');
+      const prompt = `${systemPrompt}\n\nСодержимое документа:\n${plainText.slice(0, 60000)}`;
+
+      try {
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-2.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const res = await model.generateContent(prompt);
+        responseText = res.response.text();
+      } catch (e: any) {
+        const fallbackModel = genAI.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const res = await fallbackModel.generateContent(prompt);
+        responseText = res.response.text();
+      }
     } else {
-      // PDF or Image
+      // --- PDF OR PHOTO / IMAGE ---
       let detectedMime = mimeType;
       const lower = filename.toLowerCase();
       if (lower.endsWith('.pdf') || mimeType.includes('pdf')) {
@@ -212,8 +320,12 @@ export async function POST(request: Request) {
         detectedMime = 'image/jpeg';
       } else if (lower.endsWith('.webp')) {
         detectedMime = 'image/webp';
+      } else if (lower.endsWith('.bmp')) {
+        detectedMime = 'image/bmp';
+      } else if (lower.endsWith('.heic')) {
+        detectedMime = 'image/heic';
       } else if (!detectedMime) {
-        detectedMime = 'application/pdf';
+        detectedMime = isImage ? 'image/jpeg' : 'application/pdf';
       }
 
       const filePart: Part = {
@@ -223,12 +335,16 @@ export async function POST(request: Request) {
         },
       };
 
+      const visionPrompt = isImage
+        ? 'Извлеки из этого фото/скана (чек, счет, накладная, шильдик, список от руки или распечатка) перечень товаров/материалов. Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл, кг и т.д.). Игнорируй шапки таблиц, реквизиты, подписи и пустые строки.'
+        : systemPrompt;
+
       try {
         const model = genAI.getGenerativeModel({
           model: 'gemini-2.5-flash',
           generationConfig: { responseMimeType: 'application/json' },
         });
-        const res = await model.generateContent([filePart, systemPrompt]);
+        const res = await model.generateContent([filePart, visionPrompt]);
         responseText = res.response.text();
       } catch (e: any) {
         console.warn('gemini-2.5-flash failed, trying gemini-1.5-flash fallback:', e?.message);
@@ -236,7 +352,7 @@ export async function POST(request: Request) {
           model: 'gemini-1.5-flash',
           generationConfig: { responseMimeType: 'application/json' },
         });
-        const res = await fallbackModel.generateContent([filePart, systemPrompt]);
+        const res = await fallbackModel.generateContent([filePart, visionPrompt]);
         responseText = res.response.text();
       }
     }
