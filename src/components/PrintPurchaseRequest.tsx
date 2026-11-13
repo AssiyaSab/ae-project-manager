@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import { DIRECTOR_SIGNATURE_DATA_URI } from '@/lib/signatureData';
 
 interface PrintPurchaseRequestProps {
   purchase: any;
@@ -26,7 +27,8 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
   ].includes(purchase.status);
 
   return (
-    <div ref={ref} style={{ padding: '40px', fontFamily: '"Times New Roman", Times, serif', color: '#000', backgroundColor: '#fff', width: '210mm', minHeight: '297mm', boxSizing: 'border-box' }}>
+    <div ref={ref} style={{ padding: '15px 25px', fontFamily: '"Times New Roman", Times, serif', color: '#000', backgroundColor: '#fff', width: '100%', maxWidth: '185mm', margin: '0 auto', boxSizing: 'border-box' }}>
+      <style>{`@media print { @page { size: A4; margin: 12mm; } }`}</style>
       
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '30px' }}>
         <div style={{ width: '320px', textAlign: 'right' }}>
@@ -149,7 +151,7 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
         <div style={{ display: 'flex', alignItems: 'center' }}>
           Согласовано: __________________ / Быкаев К.Ж. /
           {isApproved && (
-            <img src="/images/signature.png" alt="Signature" style={{ width: '120px', height: '60px', position: 'absolute', left: '105px', top: '-18px', opacity: 0.9 }} />
+            <img src={DIRECTOR_SIGNATURE_DATA_URI} alt="Подпись директора" style={{ width: '115px', height: 'auto', position: 'absolute', left: '105px', top: '-12px', opacity: 0.92 }} />
           )}
         </div>
         <div>
