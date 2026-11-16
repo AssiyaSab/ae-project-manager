@@ -40,6 +40,11 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
         lineHeight: 1.3,
       }}
     >
+      {/* Верхний колонтитул с ЭДО */}
+      <div style={{ textAlign: 'right', fontSize: '9pt', fontWeight: 600, color: '#000', marginBottom: '12px' }}>
+        ЭДО: too_pnu_alaugaz@mail.ru
+      </div>
+
       {/* 1. Верхний блок с логотипом и шапкой */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
