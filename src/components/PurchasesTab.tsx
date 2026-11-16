@@ -35,6 +35,9 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [supplyDeliveryDate, setSupplyDeliveryDate] = useState('');
   const [supplyComment, setSupplyComment] = useState('');
   const [supplyInvoiceFileUrl, setSupplyInvoiceFileUrl] = useState('');
+  const [supplyInvoiceFile, setSupplyInvoiceFile] = useState<File | null>(null);
+  const [isParsingInvoice, setIsParsingInvoice] = useState(false);
+  const supplyFileInputRef = useRef<HTMLInputElement>(null);
 
   // Edit State
   const [editingPurchase, setEditingPurchase] = useState<any>(null);
@@ -296,6 +299,76 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     setSupplyDeliveryDate(p.plannedDeliveryDate ? p.plannedDeliveryDate.split('T')[0] : '');
     setSupplyComment(p.supplyComment || '');
     setSupplyInvoiceFileUrl(p.invoiceFileUrl || '');
+    setSupplyInvoiceFile(null);
+    if (supplyFileInputRef.current) supplyFileInputRef.current.value = '';
+  };
+
+  const handleSupplyFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSupplyInvoiceFile(file);
+      // Если файл <= 3.5 МБ, сохраняем его Data URI прямо в invoiceFileUrl для просмотра/скачивания
+      if (file.size <= 3.5 * 1024 * 1024) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            setSupplyInvoiceFileUrl(reader.result);
+          }
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert('Файл больше 3.5 МБ: ИИ сможет распознать реквизиты, но для сохранения ссылки на файл лучше загрузить его на Google Диск и вставить ссылку.');
+      }
+    }
+  };
+
+  const handleParseSupplyInvoice = async () => {
+    const hasLink = supplyInvoiceFileUrl.trim() && !supplyInvoiceFileUrl.startsWith('data:');
+    if (!supplyInvoiceFile && !hasLink) {
+      alert('Прикрепите файл счета (PDF/фото) или вставьте ссылку на Google Диск');
+      return;
+    }
+    setIsParsingInvoice(true);
+    try {
+      let res: Response;
+      if (supplyInvoiceFile) {
+        const formData = new FormData();
+        formData.append('file', supplyInvoiceFile);
+        res = await fetch('/api/purchases/parse-invoice', {
+          method: 'POST',
+          headers: {
+            'x-auth-password': pass || '',
+            'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+          },
+          body: formData
+        });
+      } else {
+        res = await fetch('/api/purchases/parse-invoice', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-password': pass || '',
+            'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+          },
+          body: JSON.stringify({ googleDriveUrl: supplyInvoiceFileUrl.trim() })
+        });
+      }
+      const result = await res.json();
+      if (!res.ok) {
+        alert(result.error || 'Не удалось распознать счет');
+        return;
+      }
+      const d = result.data || {};
+      if (d.supplierName) setSupplySupplierName(d.supplierName);
+      if (d.invoiceNumber) setSupplyInvoiceNumber(d.invoiceNumber);
+      if (d.invoiceDate) setSupplyInvoiceDate(d.invoiceDate);
+      if (d.amount > 0) setSupplyAmount(String(d.amount));
+      if (d.comment && !supplyComment) setSupplyComment(d.comment);
+    } catch (err: any) {
+      alert('Ошибка при распознавании счета: ' + (err?.message || 'Неизвестная ошибка'));
+    } finally {
+      setIsParsingInvoice(false);
+    }
   };
 
   const handleSupplyModalSubmit = async (targetStatus: string) => {
@@ -1004,7 +1077,12 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                       </button>
                       
                       {p.invoiceFileUrl && (
-                        <a href={p.invoiceFileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline' }}>
+                        <a 
+                          href={p.invoiceFileUrl.startsWith('data:') ? `/api/purchases/invoice-file?id=${p.id}` : p.invoiceFileUrl} 
+                          target="_blank" 
+                          rel="noreferrer" 
+                          style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline' }}
+                        >
                           📥 Счет поставщика
                         </a>
                       )}
@@ -1261,14 +1339,64 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  Ссылка на PDF / скан счета от поставщика
+                  Счет от поставщика (файл PDF/Фото или ссылка на Google Диск)
                 </label>
-                <input 
-                  className="form-input" 
-                  placeholder="Ссылка на Google Drive / облако" 
-                  value={supplyInvoiceFileUrl} 
-                  onChange={e => setSupplyInvoiceFileUrl(e.target.value)} 
-                />
+                {supplyInvoiceFileUrl.startsWith('data:') ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.35)', borderRadius: '6px', fontSize: '0.8rem', color: '#6ee7b7' }}>
+                    <span>📎 {supplyInvoiceFile ? supplyInvoiceFile.name : 'Файл счета прикреплен'}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setSupplyInvoiceFileUrl(''); setSupplyInvoiceFile(null); if (supplyFileInputRef.current) supplyFileInputRef.current.value = ''; }}
+                      style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.9rem' }}
+                      title="Удалить файл счета"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <input 
+                    className="form-input" 
+                    placeholder="Ссылка на Google Drive / облако (или загрузите файл ниже)" 
+                    value={supplyInvoiceFileUrl} 
+                    onChange={e => setSupplyInvoiceFileUrl(e.target.value)} 
+                  />
+                )}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    type="file"
+                    ref={supplyFileInputRef}
+                    style={{ display: 'none' }}
+                    accept=".pdf,image/*,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.docx,.doc"
+                    onChange={handleSupplyFileChange}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => supplyFileInputRef.current?.click()}
+                    className="inline-btn"
+                    style={{ fontSize: '0.75rem', padding: '5px 10px', background: 'rgba(255,255,255,0.08)', color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px' }}
+                  >
+                    📎 Загрузить файл счета (PDF / Фото)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleParseSupplyInvoice}
+                    disabled={isParsingInvoice || (!supplyInvoiceFile && (!supplyInvoiceFileUrl.trim() || supplyInvoiceFileUrl.startsWith('data:')))}
+                    className="inline-btn"
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '5px 12px',
+                      background: isParsingInvoice ? '#475569' : 'linear-gradient(135deg, #7c3aed, #2563eb)',
+                      color: '#fff',
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      opacity: (!supplyInvoiceFile && (!supplyInvoiceFileUrl.trim() || supplyInvoiceFileUrl.startsWith('data:'))) ? 0.45 : 1,
+                      cursor: (isParsingInvoice || (!supplyInvoiceFile && (!supplyInvoiceFileUrl.trim() || supplyInvoiceFileUrl.startsWith('data:')))) ? 'not-allowed' : 'pointer'
+                    }}
+                    title="Автоматически считать Поставщика, Номер, Дату и Сумму из счета через ИИ"
+                  >
+                    {isParsingInvoice ? '⏳ Распознаю счет...' : '✨ Распознать реквизиты (ИИ)'}
+                  </button>
+                </div>
               </div>
 
               <div>

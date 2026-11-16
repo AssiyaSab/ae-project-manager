@@ -299,6 +299,11 @@ export async function PATCH(request: Request) {
           const admins = await prisma.user.findMany({
             where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
           });
+          const publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ae-project-manager-nu.vercel.app';
+          const tgInvoiceLink = updated.invoiceFileUrl
+            ? (updated.invoiceFileUrl.startsWith('data:') ? `${publicBaseUrl}/api/purchases/invoice-file?id=${updated.id}` : updated.invoiceFileUrl)
+            : '';
+
           const msg = `📑 *Счет готов к согласованию*\n\n` +
             `*Проект:* ${updated.project?.name}\n` +
             `*ТМЦ:* ${updated.title}\n` +
@@ -306,7 +311,7 @@ export async function PATCH(request: Request) {
             `*Номер счета:* ${updated.invoiceNumber || 'б/н'}\n` +
             `*Сумма:* ${updated.amount.toLocaleString('ru-RU')} ₸\n` +
             (updated.plannedDeliveryDate ? `*Срок поставки:* ${updated.plannedDeliveryDate.toLocaleDateString('ru-RU')}\n` : '') +
-            (updated.invoiceFileUrl ? `📎 [Открыть счет](${updated.invoiceFileUrl})\n` : '') +
+            (tgInvoiceLink ? `📎 [Открыть счет](${tgInvoiceLink})\n` : '') +
             `\n👉 Подтвердите оплату счета для передачи в бухгалтерию:`;
           
           const invoiceKeyboard = {
@@ -344,12 +349,17 @@ export async function PATCH(request: Request) {
             ? chiefAccountants 
             : await prisma.user.findMany({ where: { role: { in: ['ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } } });
 
+          const publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ae-project-manager-nu.vercel.app';
+          const tgInvoiceLink = updated.invoiceFileUrl
+            ? (updated.invoiceFileUrl.startsWith('data:') ? `${publicBaseUrl}/api/purchases/invoice-file?id=${updated.id}` : updated.invoiceFileUrl)
+            : '';
+
           const msg = `💳 *Счет согласован Директором к оплате!*\n\n` +
             `*Проект:* ${updated.project?.name}\n` +
             `*Поставщик:* ${updated.supplierName || 'Не указан'}\n` +
             `*Счет:* №${updated.invoiceNumber || 'б/н'}\n` +
             `*К оплате:* ${updated.amount.toLocaleString('ru-RU')} ₸\n` +
-            (updated.invoiceFileUrl ? `📎 [Скачать счет поставщика](${updated.invoiceFileUrl})\n` : '') +
+            (tgInvoiceLink ? `📎 [Скачать счет поставщика](${tgInvoiceLink})\n` : '') +
             `\n👉 Произведите оплату в клиент-банке и подтвердите в боте:`;
           
           const paymentKeyboard = {
