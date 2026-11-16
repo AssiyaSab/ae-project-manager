@@ -11,6 +11,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
 
   // Creation State
   const [purchaseType, setPurchaseType] = useState<'INVOICE' | 'EXPENSE'>('INVOICE');
+  const [purchaseDiscipline, setPurchaseDiscipline] = useState<'KIP' | 'ELECTRO' | 'GENERAL'>('GENERAL');
   const [purchaseTitle, setPurchaseTitle] = useState('');
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [purchaseProject, setPurchaseProject] = useState('');
@@ -25,6 +26,8 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   // Filters State
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [disciplineFilter, setDisciplineFilter] = useState<string>('ALL');
+  const [projectFilter, setProjectFilter] = useState<string>('ALL');
 
   // Supply Processing Modal State
   const [supplyModalPurchase, setSupplyModalPurchase] = useState<any>(null);
@@ -97,6 +100,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         },
         body: JSON.stringify({
           type: purchaseType,
+          discipline: purchaseDiscipline,
           title: purchaseTitle,
           amount: purchaseAmount ? Number(purchaseAmount) : 0,
           projectId: purchaseProject,
@@ -405,6 +409,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         body: JSON.stringify({ 
           id: editingPurchase.id, 
           title: editingPurchase.title,
+          discipline: editingPurchase.discipline || 'GENERAL',
           amount: editingPurchase.amount,
           projectId: editingPurchase.projectId || null,
           fileUrl: editingPurchase.fileUrl,
@@ -531,6 +536,14 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
       if (typeFilter === 'EXPENSE' && p.type !== 'EXPENSE') return false;
     }
 
+    if (disciplineFilter !== 'ALL') {
+      if ((p.discipline || 'GENERAL') !== disciplineFilter) return false;
+    }
+
+    if (projectFilter !== 'ALL') {
+      if (String(p.projectId) !== projectFilter) return false;
+    }
+
     if (statusFilter === 'ALL') return true;
     if (statusFilter === 'PENDING_GIP') return ['PENDING_APPROVAL', 'PENDING', 'PENDING_EXPENSE'].includes(p.status);
     if (statusFilter === 'SUPPLY') return ['IN_PROCUREMENT', 'APPROVED'].includes(p.status);
@@ -542,6 +555,17 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
     if (statusFilter === 'REJECTED') return p.status === 'REJECTED';
     return true;
   });
+
+  // Аналитика затрат по направлениям (исключая отклоненные заявки, в разрезе выбранного проекта)
+  const analyticsScope = purchases.filter(p => p.status !== 'REJECTED' && (projectFilter === 'ALL' || String(p.projectId) === projectFilter));
+  const analytics = {
+    kipSum: analyticsScope.filter(p => p.discipline === 'KIP').reduce((s, p) => s + (p.amount || 0), 0),
+    kipCount: analyticsScope.filter(p => p.discipline === 'KIP').length,
+    electroSum: analyticsScope.filter(p => p.discipline === 'ELECTRO').reduce((s, p) => s + (p.amount || 0), 0),
+    electroCount: analyticsScope.filter(p => p.discipline === 'ELECTRO').length,
+    generalSum: analyticsScope.filter(p => !p.discipline || p.discipline === 'GENERAL').reduce((s, p) => s + (p.amount || 0), 0),
+    generalCount: analyticsScope.filter(p => !p.discipline || p.discipline === 'GENERAL').length,
+  };
 
   const role = currentUser?.role;
   const isGipOrManager = ['ADMIN', 'MANAGER'].includes(role);
@@ -623,6 +647,41 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               <option value="">-- Выберите проект --</option>
               {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
+          </div>
+
+          <div style={{ flex: '1 1 220px' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+              Направление (для аналитики)
+            </label>
+            <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '3px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)', height: '42px', alignItems: 'center' }}>
+              {[
+                { key: 'KIP', label: '🎛️ КИПиА', color: '#0ea5e9' },
+                { key: 'ELECTRO', label: '⚡ Электрика', color: '#f59e0b' },
+                { key: 'GENERAL', label: '📦 Общее', color: '#64748b' },
+              ].map(opt => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setPurchaseDiscipline(opt.key as any)}
+                  style={{
+                    flex: 1,
+                    height: '100%',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    background: purchaseDiscipline === opt.key ? opt.color : 'transparent',
+                    color: purchaseDiscipline === opt.key ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 0.15s',
+                    whiteSpace: 'nowrap',
+                    padding: '0 6px'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ flex: '1 1 150px' }}>
@@ -862,8 +921,59 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
           )}
         </form>
 
+        {/* АНАЛИТИКА И ФИЛЬТР ПО НАПРАВЛЕНИЯМ (КИПиА / ЭЛЕКТРИКА) */}
+        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', alignItems: 'center', padding: '12px 15px', background: 'rgba(15, 23, 42, 0.55)', borderRadius: '10px', border: '1px solid rgba(148, 163, 184, 0.15)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>📊 Аналитика:</span>
+            <select 
+              className="form-select" 
+              style={{ width: 'auto', minWidth: '190px', padding: '5px 10px', fontSize: '0.8rem', height: '32px' }}
+              value={projectFilter}
+              onChange={e => setProjectFilter(e.target.value)}
+            >
+              <option value="ALL">Все проекты</option>
+              {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+            <button
+              type="button"
+              onClick={() => setDisciplineFilter('ALL')}
+              className="inline-btn"
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'ALL' ? '#334155' : 'rgba(255,255,255,0.04)', color: '#fff', border: disciplineFilter === 'ALL' ? '1px solid #64748b' : '1px solid rgba(255,255,255,0.08)' }}
+            >
+              Все направления
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisciplineFilter(disciplineFilter === 'KIP' ? 'ALL' : 'KIP')}
+              className="inline-btn"
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'KIP' ? 'rgba(14, 165, 233, 0.25)' : 'rgba(14, 165, 233, 0.08)', color: '#38bdf8', border: disciplineFilter === 'KIP' ? '1px solid #0ea5e9' : '1px solid rgba(14, 165, 233, 0.25)' }}
+            >
+              🎛️ КИПиА ({analytics.kipCount}): <strong>{analytics.kipSum.toLocaleString('ru-RU')} ₸</strong>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisciplineFilter(disciplineFilter === 'ELECTRO' ? 'ALL' : 'ELECTRO')}
+              className="inline-btn"
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'ELECTRO' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.08)', color: '#fbbf24', border: disciplineFilter === 'ELECTRO' ? '1px solid #f59e0b' : '1px solid rgba(245, 158, 11, 0.25)' }}
+            >
+              ⚡ Электрика ({analytics.electroCount}): <strong>{analytics.electroSum.toLocaleString('ru-RU')} ₸</strong>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDisciplineFilter(disciplineFilter === 'GENERAL' ? 'ALL' : 'GENERAL')}
+              className="inline-btn"
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'GENERAL' ? 'rgba(100, 116, 139, 0.35)' : 'rgba(255,255,255,0.04)', color: '#cbd5e1', border: disciplineFilter === 'GENERAL' ? '1px solid #94a3b8' : '1px solid rgba(255,255,255,0.08)' }}
+            >
+              📦 Общее ({analytics.generalCount}): <strong>{analytics.generalSum.toLocaleString('ru-RU')} ₸</strong>
+            </button>
+          </div>
+        </div>
+
         {/* FILTERS */}
-        <div style={{ display: 'flex', gap: '10px', marginTop: '25px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Фильтры:</span>
           
           <button 
@@ -973,6 +1083,20 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                     }}>
                       {p.type === 'EXPENSE' ? '🧾 Подотчет' : '🏢 Безнал'}
                     </span>
+                    <div style={{ marginTop: '4px' }}>
+                      <span style={{
+                        fontSize: '0.68rem',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: p.discipline === 'KIP' ? 'rgba(14, 165, 233, 0.15)' : p.discipline === 'ELECTRO' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(148, 163, 184, 0.12)',
+                        color: p.discipline === 'KIP' ? '#38bdf8' : p.discipline === 'ELECTRO' ? '#fbbf24' : '#94a3b8',
+                        border: p.discipline === 'KIP' ? '1px solid rgba(14, 165, 233, 0.3)' : p.discipline === 'ELECTRO' ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(148, 163, 184, 0.2)',
+                        display: 'inline-block'
+                      }}>
+                        {p.discipline === 'KIP' ? '🎛️ КИПиА' : p.discipline === 'ELECTRO' ? '⚡ Электрика' : '📦 Общее'}
+                      </span>
+                    </div>
                   </td>
 
                   {/* REQUESTER */}
@@ -1453,6 +1577,11 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Редактировать заявку #{editingPurchase.id}</h3>
             <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <input className="form-input" value={editingPurchase.title} onChange={e => setEditingPurchase({...editingPurchase, title: e.target.value})} required />
+              <select className="form-select" value={editingPurchase.discipline || 'GENERAL'} onChange={e => setEditingPurchase({...editingPurchase, discipline: e.target.value})}>
+                <option value="KIP">🎛️ Направление: КИПиА</option>
+                <option value="ELECTRO">⚡ Направление: Электрика</option>
+                <option value="GENERAL">📦 Направление: Общее</option>
+              </select>
               <input className="form-input" type="number" value={editingPurchase.amount} onChange={e => setEditingPurchase({...editingPurchase, amount: e.target.value})} required />
               <select className="form-select" value={editingPurchase.projectId || ''} onChange={e => setEditingPurchase({...editingPurchase, projectId: e.target.value})}>
                 <option value="">-- Без проекта --</option>

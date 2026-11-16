@@ -223,6 +223,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
         'Дата': formatDate(p.createdAt),
         'ID заявки': p.id,
         'Тип': p.type === 'EXPENSE' ? 'Подотчет / Чек' : 'Счет на ТОО',
+        'Направление': p.discipline === 'KIP' ? 'КИПиА' : p.discipline === 'ELECTRO' ? 'Электрика' : 'Общее',
         'ФИО сотрудника': p.requester?.name || 'Неизвестно',
         'Назначение платежа': p.title,
         'Поставщик': p.supplierName || '-',

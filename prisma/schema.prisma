@@ -78,6 +78,7 @@ model Alert {
 model PurchaseRequest {
   id                  Int       @id @default(autoincrement())
   type                String    @default("INVOICE") // "INVOICE" (Безналичный счет) | "EXPENSE" (Срочный подотчет/чек)
+  discipline          String    @default("GENERAL") // "KIP" (КИПиА) | "ELECTRO" (Электрика) | "GENERAL" (Общее)
   title               String
   amount              Float     @default(0) // Итоговая сумма по счету или чеку
   projectId           Int

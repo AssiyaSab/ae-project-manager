@@ -50,6 +50,8 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
 
       <div style={{ marginBottom: '15px', lineHeight: '1.5' }}>
         В связи с: <span style={{ textDecoration: 'underline' }}>{purchase.title} {purchase.project ? `(Проект: ${purchase.project.name})` : ''}</span>
+        {purchase.discipline === 'KIP' && <span style={{ marginLeft: '8px', fontWeight: 'bold' }}>[Направление: КИПиА]</span>}
+        {purchase.discipline === 'ELECTRO' && <span style={{ marginLeft: '8px', fontWeight: 'bold' }}>[Направление: Электрика]</span>}
       </div>
 
       {purchase.supplierName && (

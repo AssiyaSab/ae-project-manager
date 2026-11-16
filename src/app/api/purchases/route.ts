@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    let { type, title, amount, projectId, fileUrl, requesterId, items } = body;
+    let { type, discipline, title, amount, projectId, fileUrl, requesterId, items } = body;
     
     const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'SUPPLY'].includes(user.role);
     if (!isManagement) {
@@ -54,6 +54,7 @@ export async function POST(request: Request) {
     }
 
     const requestType = type === 'EXPENSE' ? 'EXPENSE' : 'INVOICE';
+    const requestDiscipline = ['KIP', 'ELECTRO', 'GENERAL'].includes(discipline) ? discipline : 'GENERAL';
     const numAmount = amount ? Number(amount) : 0;
     
     // Начальный статус
@@ -71,6 +72,7 @@ export async function POST(request: Request) {
     const purchase = await prisma.purchaseRequest.create({
       data: {
         type: requestType,
+        discipline: requestDiscipline,
         title,
         amount: numAmount,
         projectId: Number(projectId),
@@ -97,6 +99,7 @@ export async function POST(request: Request) {
       });
       
       const typeLabel = requestType === 'EXPENSE' ? '🧾 Срочный подотчет / чек' : '🏢 Заявка на закупку (Счет на ТОО)';
+      const disciplineLabel = requestDiscipline === 'KIP' ? '🎛️ КИПиА' : requestDiscipline === 'ELECTRO' ? '⚡ Электрика' : '📦 Общее';
       let itemsListStr = '';
       if (purchase.items && purchase.items.length > 0) {
         itemsListStr = `*Позиции (${purchase.items.length}):*\n` +
@@ -106,6 +109,7 @@ export async function POST(request: Request) {
 
       const message = `🛒 *Новая заявка в снабжение*\n\n` +
         `*Тип:* ${typeLabel}\n` +
+        `*Направление:* ${disciplineLabel}\n` +
         `*Наименование:* ${purchase.title}\n` +
         (numAmount > 0 ? `*Ориентировочная сумма:* ${numAmount.toLocaleString('ru-RU')} ₸\n` : '') +
         `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
@@ -150,6 +154,7 @@ export async function PATCH(request: Request) {
     const { 
       id, 
       status, 
+      discipline,
       title, 
       amount, 
       projectId, 
@@ -200,6 +205,7 @@ export async function PATCH(request: Request) {
 
     const data: any = {};
     if (status !== undefined) data.status = status;
+    if (discipline !== undefined && ['KIP', 'ELECTRO', 'GENERAL'].includes(discipline)) data.discipline = discipline;
     if (title !== undefined) data.title = title;
     if (amount !== undefined) data.amount = Number(amount);
     if (projectId !== undefined) data.projectId = projectId ? Number(projectId) : null;
