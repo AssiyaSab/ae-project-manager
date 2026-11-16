@@ -55,14 +55,24 @@ export default function TripsTab({ currentUser, projects, users }: any) {
     fetchData();
   }, [pass]);
 
+  useEffect(() => {
+    if (currentUser?.id && currentUser.id > 0 && currentUser.id !== 999 && !tripEmployee) {
+      setTripEmployee(String(currentUser.id));
+    }
+  }, [currentUser]);
+
   const handleTripSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await fetch('/api/trips', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-auth-password': pass || '', 'x-auth-login': localStorage.getItem('ae_auth_login') || '' },
+        headers: { 
+          'Content-Type': 'application/json', 
+          'x-auth-password': pass || '', 
+          'x-auth-login': localStorage.getItem('ae_auth_login') || currentUser?.login || '' 
+        },
         body: JSON.stringify({
-          employeeId: tripEmployee,
+          employeeId: tripEmployee || (currentUser?.id > 0 ? currentUser.id : ''),
           destination: tripDest,
           purpose: tripPurpose,
           startDate: tripStart,
@@ -71,7 +81,8 @@ export default function TripsTab({ currentUser, projects, users }: any) {
           projectId: tripProject || null
         })
       });
-      setTripEmployee(''); setTripDest(''); setTripPurpose(''); setTripStart(''); setTripEnd(''); setTripBudget(''); setTripProject('');
+      setTripEmployee(currentUser?.id && currentUser.id > 0 && currentUser.id !== 999 ? String(currentUser.id) : ''); 
+      setTripDest(''); setTripPurpose(''); setTripStart(''); setTripEnd(''); setTripBudget(''); setTripProject('');
       fetchData();
     } catch (e) {
       console.error(e);

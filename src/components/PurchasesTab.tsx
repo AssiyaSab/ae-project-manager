@@ -93,7 +93,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         headers: { 
           'Content-Type': 'application/json', 
           'x-auth-password': pass || '', 
-          'x-auth-login': localStorage.getItem('ae_auth_login') || '' 
+          'x-auth-login': localStorage.getItem('ae_auth_login') || currentUser?.login || '' 
         },
         body: JSON.stringify({
           type: purchaseType,
@@ -101,6 +101,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
           amount: purchaseAmount ? Number(purchaseAmount) : 0,
           projectId: purchaseProject,
           fileUrl: purchaseFileUrl,
+          requesterId: currentUser?.id && currentUser.id > 0 && currentUser.id !== 999 ? currentUser.id : undefined,
           items: purchaseItems.filter(item => item.name.trim().length > 0)
         })
       });

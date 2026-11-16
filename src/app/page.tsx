@@ -216,6 +216,11 @@ export default function Home() {
       try {
         const u = JSON.parse(savedUser);
         setCurrentUser(u);
+        if (u.login) {
+          localStorage.setItem('ae_auth_login', u.login);
+        } else if (u.id === 0) {
+          localStorage.setItem('ae_auth_login', 'admin');
+        }
         if (savedPassword) {
           setAdminPassword(savedPassword);
         }
@@ -265,7 +270,7 @@ export default function Home() {
       // We store the password in state to pass it to APIs. In a real app we'd use a JWT.
       setAdminPassword(loginPassword); 
       // Also store login in localStorage so refreshData can use it
-      localStorage.setItem('ae_auth_login', loginUserId);
+      localStorage.setItem('ae_auth_login', data.login || loginUserId);
 
       localStorage.setItem('ae_current_user', JSON.stringify(data));
       localStorage.setItem('ae_admin_password', loginPassword);
