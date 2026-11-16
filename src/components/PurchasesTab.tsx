@@ -17,8 +17,9 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   const [purchaseFileUrl, setPurchaseFileUrl] = useState('');
   const [purchaseItems, setPurchaseItems] = useState<{ name: string; quantity: number; unit: string; price?: number }[]>([]);
   const [isParsingSpec, setIsParsingSpec] = useState(false);
+  const [parseProgress, setParseProgress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Filters State
@@ -110,7 +111,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
       setPurchaseProject(''); 
       setPurchaseFileUrl('');
       setPurchaseItems([]);
-      setUploadedFile(null);
+      setUploadedFiles([]);
       setStatusFilter('ALL');
       if (fileInputRef.current) fileInputRef.current.value = '';
       await fetchData();
@@ -123,66 +124,110 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setUploadedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files);
+      setUploadedFiles(prev => {
+        const existingKeys = new Set(prev.map(f => `${f.name}_${f.size}`));
+        const uniqueNew = selected.filter(f => !existingKeys.has(`${f.name}_${f.size}`));
+        return [...prev, ...uniqueNew];
+      });
+      e.target.value = '';
     }
   };
 
+  const handleRemoveUploadedFile = (idx: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleParseSpec = async () => {
-    if (!uploadedFile && !purchaseFileUrl.trim()) {
-      alert('Пожалуйста, вставьте ссылку на Google Диск / Таблицу или прикрепите файл Excel/PDF для распознавания');
+    if (uploadedFiles.length === 0 && !purchaseFileUrl.trim()) {
+      alert('Пожалуйста, вставьте ссылку на Google Диск / Таблицу или прикрепите хотя бы один файл для распознавания');
       return;
     }
 
     setIsParsingSpec(true);
+    setParseProgress('');
+    const collectedItems: { name: string; quantity: number; unit: string; price?: number }[] = [];
+    const errors: string[] = [];
+
     try {
-      let res: Response;
-      if (uploadedFile) {
-        const formData = new FormData();
-        formData.append('file', uploadedFile);
-        if (purchaseFileUrl.trim()) {
-          formData.append('googleDriveUrl', purchaseFileUrl.trim());
+      // 1. Обрабатываем все выбранные локальные файлы по очереди
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        setParseProgress(`⏳ Файл ${i + 1}/${uploadedFiles.length}: ${file.name.length > 16 ? file.name.slice(0, 14) + '...' : file.name}`);
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch('/api/purchases/parse-spec', {
+            method: 'POST',
+            headers: {
+              'x-auth-password': pass || '',
+              'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+            },
+            body: formData
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            errors.push(`${file.name}: ${data.error || 'Ошибка распознавания'}`);
+          } else if (Array.isArray(data.items) && data.items.length > 0) {
+            collectedItems.push(...data.items);
+          } else {
+            errors.push(`${file.name}: позиции не найдены`);
+          }
+        } catch (fileErr: any) {
+          errors.push(`${file.name}: ${fileErr?.message || 'Ошибка сети'}`);
         }
-        res = await fetch('/api/purchases/parse-spec', {
-          method: 'POST',
-          headers: {
-            'x-auth-password': pass || '',
-            'x-auth-login': localStorage.getItem('ae_auth_login') || ''
-          },
-          body: formData
-        });
-      } else {
-        res = await fetch('/api/purchases/parse-spec', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-auth-password': pass || '',
-            'x-auth-login': localStorage.getItem('ae_auth_login') || ''
-          },
-          body: JSON.stringify({ googleDriveUrl: purchaseFileUrl.trim() })
-        });
       }
 
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Ошибка при распознавании спецификации');
-        return;
+      // 2. Если также указана ссылка на Google Диск — обрабатываем и её
+      if (purchaseFileUrl.trim()) {
+        setParseProgress('⏳ Читаю ссылку Google Диск...');
+        try {
+          const res = await fetch('/api/purchases/parse-spec', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-auth-password': pass || '',
+              'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+            },
+            body: JSON.stringify({ googleDriveUrl: purchaseFileUrl.trim() })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            errors.push(`Ссылка Google Диск: ${data.error || 'Ошибка распознавания'}`);
+          } else if (Array.isArray(data.items) && data.items.length > 0) {
+            collectedItems.push(...data.items);
+          } else if (uploadedFiles.length === 0) {
+            errors.push('По ссылке позиции ТМЦ не найдены');
+          }
+        } catch (urlErr: any) {
+          errors.push(`Ссылка Google Диск: ${urlErr?.message || 'Ошибка сети'}`);
+        }
       }
 
-      if (Array.isArray(data.items) && data.items.length > 0) {
-        setPurchaseItems(prev => [...prev, ...data.items]);
+      if (collectedItems.length > 0) {
+        setPurchaseItems(prev => [...prev, ...collectedItems]);
         if (!purchaseTitle) {
-          const firstItem = data.items[0]?.name || 'ТМЦ';
-          setPurchaseTitle(`Закупка: ${firstItem.slice(0, 45)}${data.items.length > 1 ? ` (+${data.items.length - 1} поз.)` : ''}`);
+          const firstItem = collectedItems[0]?.name || 'ТМЦ';
+          setPurchaseTitle(`Закупка: ${firstItem.slice(0, 45)}${collectedItems.length > 1 ? ` (+${collectedItems.length - 1} поз.)` : ''}`);
         }
-      } else {
-        alert('ИИ не обнаружил позиций ТМЦ в документе. Проверьте содержимое файла.');
+      }
+
+      if (errors.length > 0) {
+        alert(
+          (collectedItems.length > 0
+            ? `Добавлено позиций: ${collectedItems.length}.\n\nНе удалось полностью обработать:\n`
+            : 'Не удалось распознать позиции:\n') + errors.join('\n')
+        );
+      } else if (collectedItems.length === 0) {
+        alert('ИИ не обнаружил позиций ТМЦ в документах. Проверьте содержимое файлов.');
       }
     } catch (err: any) {
       console.error('handleParseSpec error:', err);
       alert('Сбой при обращении к сервису распознавания: ' + (err?.message || 'Неизвестная ошибка'));
     } finally {
       setIsParsingSpec(false);
+      setParseProgress('');
     }
   };
 
@@ -531,60 +576,86 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               onChange={e => setPurchaseFileUrl(e.target.value)} 
             />
             {purchaseType === 'INVOICE' && (
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  style={{ display: 'none' }} 
-                  accept=".xlsx,.xls,.csv,.docx,.doc,.pdf,image/*,.jpg,.jpeg,.png,.webp,.bmp" 
-                  onChange={handleFileChange} 
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-btn"
-                  style={{ 
-                    fontSize: '0.75rem', 
-                    padding: '5px 10px', 
-                    background: uploadedFile ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.08)', 
-                    color: uploadedFile ? '#34d399' : '#e2e8f0', 
-                    border: uploadedFile ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: '6px'
-                  }}
-                  title="Выбрать файл (Excel, Word, PDF или фото) с компьютера/смартфона"
-                >
-                  {uploadedFile ? `📎 ${uploadedFile.name.length > 22 ? uploadedFile.name.slice(0, 20) + '...' : uploadedFile.name}` : '📎 Загрузить Excel / Word / PDF / Фото'}
-                </button>
-                {uploadedFile && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input 
+                    type="file" 
+                    multiple
+                    ref={fileInputRef} 
+                    style={{ display: 'none' }} 
+                    accept=".xlsx,.xls,.csv,.docx,.doc,.pdf,image/*,.jpg,.jpeg,.png,.webp,.bmp" 
+                    onChange={handleFileChange} 
+                  />
                   <button
                     type="button"
-                    onClick={() => { setUploadedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                    style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.9rem', padding: '0 4px' }}
-                    title="Удалить прикрепленный файл"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-btn"
+                    style={{ 
+                      fontSize: '0.75rem', 
+                      padding: '5px 10px', 
+                      background: uploadedFiles.length > 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.08)', 
+                      color: uploadedFiles.length > 0 ? '#34d399' : '#e2e8f0', 
+                      border: uploadedFiles.length > 0 ? '1px solid #10b981' : '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '6px'
+                    }}
+                    title="Выбрать один или несколько файлов (Excel, Word, PDF или фото) с компьютера/смартфона"
                   >
-                    ✕
+                    {uploadedFiles.length > 0 ? `📎 Добавить ещё файлы (${uploadedFiles.length})` : '📎 Загрузить файлы (Excel / Word / PDF / Фото)'}
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleParseSpec}
+                    disabled={isParsingSpec || (uploadedFiles.length === 0 && !purchaseFileUrl.trim())}
+                    className="inline-btn"
+                    style={{ 
+                      fontSize: '0.75rem', 
+                      padding: '5px 12px', 
+                      background: isParsingSpec ? '#475569' : 'linear-gradient(135deg, #7c3aed, #2563eb)', 
+                      color: '#fff', 
+                      fontWeight: 600,
+                      borderRadius: '6px',
+                      opacity: (uploadedFiles.length === 0 && !purchaseFileUrl.trim()) ? 0.45 : 1,
+                      cursor: (isParsingSpec || (uploadedFiles.length === 0 && !purchaseFileUrl.trim())) ? 'not-allowed' : 'pointer',
+                      boxShadow: (uploadedFiles.length === 0 && !purchaseFileUrl.trim()) ? 'none' : '0 2px 8px rgba(124, 58, 237, 0.3)'
+                    }}
+                    title="Распознать позиции спецификации с помощью ИИ (Gemini)"
+                  >
+                    {isParsingSpec ? (parseProgress || '⏳ Распознавание ИИ...') : '✨ Заполнить список из файлов'}
+                  </button>
+                </div>
+
+                {uploadedFiles.length > 0 && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
+                    {uploadedFiles.map((file, idx) => (
+                      <span
+                        key={`${file.name}_${file.size}_${idx}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '0.72rem',
+                          padding: '3px 8px',
+                          borderRadius: '12px',
+                          background: 'rgba(16, 185, 129, 0.14)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          color: '#6ee7b7',
+                        }}
+                      >
+                        <span title={file.name}>
+                          {file.name.length > 25 ? file.name.slice(0, 22) + '...' : file.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUploadedFile(idx)}
+                          style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '0.8rem', padding: 0, lineHeight: 1 }}
+                          title="Удалить файл"
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 )}
-                <button
-                  type="button"
-                  onClick={handleParseSpec}
-                  disabled={isParsingSpec || (!uploadedFile && !purchaseFileUrl.trim())}
-                  className="inline-btn"
-                  style={{ 
-                    fontSize: '0.75rem', 
-                    padding: '5px 12px', 
-                    background: isParsingSpec ? '#475569' : 'linear-gradient(135deg, #7c3aed, #2563eb)', 
-                    color: '#fff', 
-                    fontWeight: 600,
-                    borderRadius: '6px',
-                    opacity: (!uploadedFile && !purchaseFileUrl.trim()) ? 0.45 : 1,
-                    cursor: (isParsingSpec || (!uploadedFile && !purchaseFileUrl.trim())) ? 'not-allowed' : 'pointer',
-                    boxShadow: (!uploadedFile && !purchaseFileUrl.trim()) ? 'none' : '0 2px 8px rgba(124, 58, 237, 0.3)'
-                  }}
-                  title="Распознать позиции спецификации с помощью ИИ (Gemini)"
-                >
-                  {isParsingSpec ? '⏳ Распознавание ИИ...' : '✨ Заполнить список из файла'}
-                </button>
               </div>
             )}
           </div>

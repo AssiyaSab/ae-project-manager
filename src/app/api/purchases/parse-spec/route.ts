@@ -20,7 +20,11 @@ async function generateWithFallback(genAI: GoogleGenerativeAI, contents: string 
     try {
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: { responseMimeType: 'application/json' },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: 65536,
+          temperature: 0.1,
+        },
       });
       const res = await model.generateContent(contents);
       return res.response.text();
@@ -32,35 +36,75 @@ async function generateWithFallback(genAI: GoogleGenerativeAI, contents: string 
   throw lastErr || new Error('Все доступные модели Gemini временно недоступны.');
 }
 
+function parseJsonItemsSafely(responseText: string): any[] {
+  let cleanText = responseText.trim();
+  if (cleanText.startsWith('```json')) {
+    cleanText = cleanText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+  } else if (cleanText.startsWith('```')) {
+    cleanText = cleanText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+  }
+
+  let parsed: any = null;
+  try {
+    parsed = JSON.parse(cleanText);
+  } catch {
+    // Попытка восстановить обрезанный JSON-массив, если документ был экстремально длинным
+    const arrStart = cleanText.indexOf('[');
+    const lastObjEnd = cleanText.lastIndexOf('}');
+    if (arrStart !== -1 && lastObjEnd > arrStart) {
+      try {
+        const salvaged = cleanText.slice(arrStart, lastObjEnd + 1) + ']';
+        parsed = JSON.parse(salvaged);
+      } catch {
+        throw new Error('ИИ вернул неструктурированный ответ. Попробуйте еще раз или проверьте четкость документа.');
+      }
+    } else {
+      throw new Error('ИИ вернул неструктурированный ответ. Попробуйте еще раз или проверьте четкость документа.');
+    }
+  }
+
+  const rawList = Array.isArray(parsed) ? parsed : (parsed.items || parsed.products || parsed.materials || parsed.data || []);
+  return rawList
+    .map((item: any) => {
+      const rawQty = item.quantity ?? item.qty ?? item.count ?? 1;
+      const numQty = typeof rawQty === 'number' ? rawQty : parseFloat(String(rawQty).replace(',', '.').replace(/\s+/g, '')) || 1;
+      const rawPrice = item.price ?? item.cost ?? 0;
+      const numPrice = typeof rawPrice === 'number' ? rawPrice : parseFloat(String(rawPrice).replace(',', '.').replace(/\s+/g, '')) || 0;
+      return {
+        name: String(item.name || item.title || item.description || '').trim(),
+        quantity: numQty > 0 ? numQty : 1,
+        unit: String(item.unit || item.uom || item.measure || 'шт').trim(),
+        price: numPrice >= 0 ? numPrice : 0,
+        total: (numPrice >= 0 ? numPrice : 0) * (numQty > 0 ? numQty : 1),
+      };
+    })
+    .filter((item: any) => item.name.length > 0);
+}
+
 function extractGoogleDriveInfo(url: string): { type: 'spreadsheet' | 'document' | 'file'; id: string } | null {
   if (!url) return null;
   const cleanUrl = url.trim();
 
-  // 1. Google Spreadsheets: docs.google.com/spreadsheets/d/{ID}
   const sheetMatch = cleanUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (sheetMatch && sheetMatch[1]) {
     return { type: 'spreadsheet', id: sheetMatch[1] };
   }
 
-  // 2. Google Docs: docs.google.com/document/d/{ID}
   const docMatch = cleanUrl.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
   if (docMatch && docMatch[1]) {
     return { type: 'document', id: docMatch[1] };
   }
 
-  // 3. Google Drive File: drive.google.com/file/d/{ID}
   const fileMatch = cleanUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (fileMatch && fileMatch[1]) {
     return { type: 'file', id: fileMatch[1] };
   }
 
-  // 4. ID query param: ?id={ID} or &id={ID}
   const idMatch = cleanUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idMatch && idMatch[1]) {
     return { type: 'file', id: idMatch[1] };
   }
 
-  // 5. Generic /d/{ID}
   const genericMatch = cleanUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (genericMatch && genericMatch[1]) {
     return { type: 'file', id: genericMatch[1] };
@@ -94,7 +138,6 @@ async function fetchGoogleDriveContent(info: { type: 'spreadsheet' | 'document' 
   const arrayBuffer = await res.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  // Check if Google returned an HTML login page instead of the file
   const previewText = buffer.slice(0, 1000).toString('utf-8');
   if (
     (contentType.includes('text/html') || previewText.includes('<!DOCTYPE html') || previewText.includes('<html')) &&
@@ -170,6 +213,35 @@ function isImageFile(mimeType: string, filename: string): boolean {
   return false;
 }
 
+/**
+ * Splits text lines into chunks of maxChars / maxLines so no items are skipped by the LLM.
+ */
+function chunkTextLines(text: string, maxLines = 40, maxChars = 12000): string[] {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const chunks: string[] = [];
+  let currentChunk: string[] = [];
+  let currentLen = 0;
+
+  for (const line of lines) {
+    if (
+      currentChunk.length > 0 &&
+      (currentChunk.length >= maxLines || currentLen + line.length > maxChars)
+    ) {
+      chunks.push(currentChunk.join('\n'));
+      currentChunk = [];
+      currentLen = 0;
+    }
+    currentChunk.push(line);
+    currentLen += line.length + 1;
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join('\n'));
+  }
+
+  return chunks;
+}
+
 export async function POST(request: Request) {
   const user = await validateAuth(request);
   if (!user) {
@@ -212,7 +284,6 @@ export async function POST(request: Request) {
       }
     }
 
-    // Handle Google Drive URL if no file buffer was uploaded
     if (!buffer && googleDriveUrl) {
       const gInfo = extractGoogleDriveInfo(googleDriveUrl);
       if (!gInfo) {
@@ -235,36 +306,83 @@ export async function POST(request: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const systemPrompt = 'Извлеки из документа/фотографии список закупаемых товаров/материалов (спецификация, чек, накладная, ведомость потребности, перечень оборудования). Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл и т.д.). Игнорируй шапки таблиц, реквизиты, подписи и пустые строки.';
+    const systemPrompt =
+      'Извлеки из документа/фотографии АБСОЛЮТНО ВСЕ строки закупаемых товаров, оборудования и материалов (без исключения, не сокращай и не пропускай позиции, включая все листы и страницы). ' +
+      'Если артикул, марка, модель или ГОСТ указаны в отдельной колонке — объединяй их с названием в поле name. ' +
+      'Верни строгий JSON-массив объектов с полями: name (полное наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл и т.д.). ' +
+      'Игнорируй только шапки таблиц, итоги, реквизиты, подписи и пустые строки.';
 
-    let responseText = '';
+    let allItems: any[] = [];
     const isSpreadsheet = isExcelOrCsv(mimeType, filename);
     const isWord = isWordDocument(mimeType, filename);
     const isImage = isImageFile(mimeType, filename);
 
     if (isSpreadsheet) {
-      // --- EXCEL / CSV ---
-      let sheetText = '';
+      // --- EXCEL / CSV: очищаем пустые колонки/строки и обрабатываем чанками по 35 строк ---
+      const sheetBlocks: { sheetName: string; header: string; rows: string[] }[] = [];
       try {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         for (const sheetName of workbook.SheetNames) {
           const sheet = workbook.Sheets[sheetName];
-          const csv = XLSX.utils.sheet_to_csv(sheet);
-          if (csv && csv.trim()) {
-            sheetText += `--- Лист: ${sheetName} ---\n${csv}\n\n`;
+          const rawRows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+          const cleanLines: string[] = [];
+          for (const row of rawRows) {
+            if (!Array.isArray(row)) continue;
+            // Убираем пустые ячейки с конца и чистим переносы внутри ячеек
+            const formattedCells = row.map((c) => String(c ?? '').replace(/\s+/g, ' ').trim());
+            while (formattedCells.length > 0 && formattedCells[formattedCells.length - 1] === '') {
+              formattedCells.pop();
+            }
+            if (formattedCells.some((c) => c !== '')) {
+              cleanLines.push(formattedCells.join(' | '));
+            }
+          }
+          if (cleanLines.length > 0) {
+            // Первые 2 строки берем как возможную шапку, чтобы прикладывать к каждому чанку
+            const header = cleanLines.slice(0, Math.min(2, cleanLines.length)).join('\n');
+            const bodyRows = cleanLines.length > 2 ? cleanLines.slice(2) : cleanLines;
+            sheetBlocks.push({ sheetName, header, rows: bodyRows });
           }
         }
       } catch (xlsxErr) {
         console.warn('XLSX parsing failed, fallback to raw text/utf8:', xlsxErr);
-        sheetText = buffer.slice(0, 100000).toString('utf-8');
+        const fallbackText = buffer.slice(0, 150000).toString('utf-8');
+        const chunks = chunkTextLines(fallbackText, 35, 12000);
+        for (const chunk of chunks) {
+          const responseText = await generateWithFallback(
+            genAI,
+            `${systemPrompt}\n\nЧасть таблицы:\n${chunk}`
+          );
+          allItems.push(...parseJsonItemsSafely(responseText));
+        }
       }
 
-      if (!sheetText.trim()) {
+      if (sheetBlocks.length === 0 && allItems.length === 0) {
         return NextResponse.json({ error: 'Не удалось прочитать содержимое таблицы. Файл пуст.' }, { status: 400 });
       }
 
-      const prompt = `${systemPrompt}\n\nСодержимое документа спецификации (таблица Excel/CSV):\n${sheetText.slice(0, 60000)}`;
-      responseText = await generateWithFallback(genAI, prompt);
+      const CHUNK_SIZE = 35;
+      for (const block of sheetBlocks) {
+        if (block.rows.length <= CHUNK_SIZE) {
+          const content = `--- Лист: ${block.sheetName} ---\n${block.header}\n${block.rows.join('\n')}`;
+          const responseText = await generateWithFallback(
+            genAI,
+            `${systemPrompt}\n\nСодержимое документа спецификации (Excel/CSV):\n${content}`
+          );
+          allItems.push(...parseJsonItemsSafely(responseText));
+        } else {
+          // Разбиваем длинную таблицу на порции по 35 строк с сохранением шапки
+          for (let i = 0; i < block.rows.length; i += CHUNK_SIZE) {
+            const slice = block.rows.slice(i, i + CHUNK_SIZE);
+            const content = `--- Лист: ${block.sheetName} (строки ${i + 1}-${i + slice.length}) ---\nШапка таблицы:\n${block.header}\n\nСтроки данных:\n${slice.join('\n')}`;
+            const responseText = await generateWithFallback(
+              genAI,
+              `${systemPrompt}\n\n${content}`
+            );
+            allItems.push(...parseJsonItemsSafely(responseText));
+          }
+        }
+      }
     } else if (isWord) {
       // --- WORD (.docx / .doc) ---
       let docText = '';
@@ -280,13 +398,25 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Не удалось извлечь текст из Word-документа. Файл пуст или защищен.' }, { status: 400 });
       }
 
-      const prompt = `${systemPrompt}\n\nСодержимое документа спецификации (Word):\n${docText.slice(0, 60000)}`;
-      responseText = await generateWithFallback(genAI, prompt);
+      const chunks = chunkTextLines(docText, 60, 12000);
+      for (const chunk of chunks) {
+        const responseText = await generateWithFallback(
+          genAI,
+          `${systemPrompt}\n\nСодержимое документа спецификации (Word):\n${chunk}`
+        );
+        allItems.push(...parseJsonItemsSafely(responseText));
+      }
     } else if (mimeType === 'text/plain') {
-      // --- PLAIN TEXT (например, Google Docs export) ---
+      // --- PLAIN TEXT (Google Docs export) ---
       const plainText = buffer.toString('utf-8');
-      const prompt = `${systemPrompt}\n\nСодержимое документа:\n${plainText.slice(0, 60000)}`;
-      responseText = await generateWithFallback(genAI, prompt);
+      const chunks = chunkTextLines(plainText, 60, 12000);
+      for (const chunk of chunks) {
+        const responseText = await generateWithFallback(
+          genAI,
+          `${systemPrompt}\n\nСодержимое документа:\n${chunk}`
+        );
+        allItems.push(...parseJsonItemsSafely(responseText));
+      }
     } else {
       // --- PDF OR PHOTO / IMAGE ---
       let detectedMime = mimeType;
@@ -315,51 +445,17 @@ export async function POST(request: Request) {
       };
 
       const visionPrompt = isImage
-        ? 'Извлеки из этого фото/скана (чек, счет, накладная, шильдик, список от руки или распечатка) перечень товаров/материалов. Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл, кг и т.д.). Игнорируй шапки таблиц, реквизиты, подписи и пустые строки.'
+        ? 'Извлеки из этого фото/скана (чек, счет, накладная, шильдик, список от руки или распечатка) АБСОЛЮТНО ВСЕ строки товаров/материалов без пропусков. Верни строгий JSON-массив объектов с полями: name (наименование и характеристики), quantity (число, если не указано — 1), unit (единица измерения: шт, м, компл, кг и т.д.). Игнорируй шапки таблиц, реквизиты, подписи и пустые строки.'
         : systemPrompt;
 
-      responseText = await generateWithFallback(genAI, [filePart, visionPrompt]);
+      const responseText = await generateWithFallback(genAI, [filePart, visionPrompt]);
+      allItems.push(...parseJsonItemsSafely(responseText));
     }
-
-    let parsed: any = null;
-    let cleanText = responseText.trim();
-    if (cleanText.startsWith('```json')) {
-      cleanText = cleanText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
-    } else if (cleanText.startsWith('```')) {
-      cleanText = cleanText.replace(/^```\s*/, '').replace(/```\s*$/, '');
-    }
-
-    try {
-      parsed = JSON.parse(cleanText);
-    } catch (parseErr) {
-      console.error('Failed to parse JSON from Gemini:', responseText);
-      return NextResponse.json(
-        { error: 'ИИ вернул неструктурированный ответ. Попробуйте еще раз или проверьте четкость документа.', raw: responseText },
-        { status: 500 }
-      );
-    }
-
-    const rawList = Array.isArray(parsed) ? parsed : (parsed.items || parsed.products || parsed.materials || parsed.data || []);
-    const items = rawList
-      .map((item: any) => {
-        const rawQty = item.quantity ?? item.qty ?? item.count ?? 1;
-        const numQty = typeof rawQty === 'number' ? rawQty : parseFloat(String(rawQty).replace(',', '.')) || 1;
-        const rawPrice = item.price ?? item.cost ?? 0;
-        const numPrice = typeof rawPrice === 'number' ? rawPrice : parseFloat(String(rawPrice).replace(',', '.')) || 0;
-        return {
-          name: String(item.name || item.title || item.description || '').trim(),
-          quantity: numQty > 0 ? numQty : 1,
-          unit: String(item.unit || item.uom || item.measure || 'шт').trim(),
-          price: numPrice >= 0 ? numPrice : 0,
-          total: (numPrice >= 0 ? numPrice : 0) * (numQty > 0 ? numQty : 1),
-        };
-      })
-      .filter((item: any) => item.name.length > 0);
 
     return NextResponse.json({
       success: true,
-      count: items.length,
-      items,
+      count: allItems.length,
+      items: allItems,
     });
   } catch (error: any) {
     console.error('Error in /api/purchases/parse-spec:', error);
