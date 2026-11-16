@@ -922,7 +922,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
         </form>
 
         {/* АНАЛИТИКА И ФИЛЬТР ПО НАПРАВЛЕНИЯМ (КИПиА / ЭЛЕКТРИКА) */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', alignItems: 'center', padding: '12px 15px', background: 'rgba(15, 23, 42, 0.55)', borderRadius: '10px', border: '1px solid rgba(148, 163, 184, 0.15)' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap', alignItems: 'center', padding: '12px 15px', background: 'var(--bg-input)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>📊 Аналитика:</span>
             <select 
@@ -941,7 +941,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               type="button"
               onClick={() => setDisciplineFilter('ALL')}
               className="inline-btn"
-              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'ALL' ? '#334155' : 'rgba(255,255,255,0.04)', color: '#fff', border: disciplineFilter === 'ALL' ? '1px solid #64748b' : '1px solid rgba(255,255,255,0.08)' }}
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'ALL' ? '#334155' : 'var(--bg-card)', color: disciplineFilter === 'ALL' ? '#fff' : 'var(--text-primary)', border: disciplineFilter === 'ALL' ? '1px solid #64748b' : '1px solid var(--border-color)' }}
             >
               Все направления
             </button>
@@ -949,7 +949,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               type="button"
               onClick={() => setDisciplineFilter(disciplineFilter === 'KIP' ? 'ALL' : 'KIP')}
               className="inline-btn"
-              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'KIP' ? 'rgba(14, 165, 233, 0.25)' : 'rgba(14, 165, 233, 0.08)', color: '#38bdf8', border: disciplineFilter === 'KIP' ? '1px solid #0ea5e9' : '1px solid rgba(14, 165, 233, 0.25)' }}
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'KIP' ? 'rgba(14, 165, 233, 0.25)' : 'rgba(14, 165, 233, 0.08)', color: '#0284c7', border: disciplineFilter === 'KIP' ? '1px solid #0ea5e9' : '1px solid rgba(14, 165, 233, 0.35)' }}
             >
               🎛️ КИПиА ({analytics.kipCount}): <strong>{analytics.kipSum.toLocaleString('ru-RU')} ₸</strong>
             </button>
@@ -957,7 +957,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               type="button"
               onClick={() => setDisciplineFilter(disciplineFilter === 'ELECTRO' ? 'ALL' : 'ELECTRO')}
               className="inline-btn"
-              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'ELECTRO' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.08)', color: '#fbbf24', border: disciplineFilter === 'ELECTRO' ? '1px solid #f59e0b' : '1px solid rgba(245, 158, 11, 0.25)' }}
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'ELECTRO' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.08)', color: '#d97706', border: disciplineFilter === 'ELECTRO' ? '1px solid #f59e0b' : '1px solid rgba(245, 158, 11, 0.35)' }}
             >
               ⚡ Электрика ({analytics.electroCount}): <strong>{analytics.electroSum.toLocaleString('ru-RU')} ₸</strong>
             </button>
@@ -965,7 +965,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
               type="button"
               onClick={() => setDisciplineFilter(disciplineFilter === 'GENERAL' ? 'ALL' : 'GENERAL')}
               className="inline-btn"
-              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'GENERAL' ? 'rgba(100, 116, 139, 0.35)' : 'rgba(255,255,255,0.04)', color: '#cbd5e1', border: disciplineFilter === 'GENERAL' ? '1px solid #94a3b8' : '1px solid rgba(255,255,255,0.08)' }}
+              style={{ fontSize: '0.78rem', padding: '5px 12px', background: disciplineFilter === 'GENERAL' ? '#475569' : 'var(--bg-card)', color: disciplineFilter === 'GENERAL' ? '#fff' : 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
             >
               📦 Общее ({analytics.generalCount}): <strong>{analytics.generalSum.toLocaleString('ru-RU')} ₸</strong>
             </button>

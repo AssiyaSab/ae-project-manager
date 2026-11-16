@@ -65,6 +65,7 @@ interface ChatMessage {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks' | 'sales'>('dashboard');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
   // Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -208,8 +209,14 @@ export default function Home() {
     }
   }, [adminPassword]);
 
-  // Load session from localStorage on mount
+  // Load session & theme from localStorage on mount
   useEffect(() => {
+    const savedTheme = localStorage.getItem('ae_theme') as 'dark' | 'light' | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setTheme(savedTheme);
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+
     const savedUser = localStorage.getItem('ae_current_user');
     const savedPassword = localStorage.getItem('ae_admin_password');
     if (savedUser) {
@@ -233,6 +240,13 @@ export default function Home() {
       }
     }
   }, []);
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    localStorage.setItem('ae_theme', next);
+    document.documentElement.setAttribute('data-theme', next);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('ae_current_user');
@@ -1021,7 +1035,25 @@ export default function Home() {
           </nav>
           
           {currentUser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#94a3b8', fontSize: '13px', marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)', fontSize: '13px', marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Переключить на светлую тему' : 'Переключить на тёмную тему'}
+                style={{
+                  background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+                  color: theme === 'dark' ? '#fde047' : '#0f172a',
+                  border: '1px solid var(--border-color)',
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  flexShrink: 0
+                }}
+              >
+                {theme === 'dark' ? '☀️ Светлая' : '🌙 Тёмная'}
+              </button>
               <span style={{ fontWeight: 500 }}>👤 {currentUser.name} ({currentUser.role === 'ADMIN' ? 'Директор' : currentUser.role === 'MANAGER' ? 'Руководитель' : currentUser.role === 'CHIEF_ACCOUNTANT' ? 'Главный бухгалтер' : currentUser.role === 'ACCOUNTANT' ? 'Бухгалтер' : currentUser.role === 'SUPPLY' ? 'Снабжение' : currentUser.role === 'WAREHOUSE' ? 'Кладовщик' : currentUser.role === 'ENGINEER' ? 'Инженер' : 'Сборщик'})</span>
               <button 
                 onClick={handleLogout}
