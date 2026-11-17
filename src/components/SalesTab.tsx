@@ -21,7 +21,8 @@ import {
   ExternalLink,
   ShieldCheck,
   ChevronRight,
-  Package
+  Package,
+  Pencil
 } from 'lucide-react';
 
 interface SalesTabProps {
@@ -47,6 +48,8 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
+  const [editingOrderNumber, setEditingOrderNumber] = useState<string>('');
   const [showShipModal, setShowShipModal] = useState<boolean>(false);
   const [selectedOrderForShip, setSelectedOrderForShip] = useState<any>(null);
 
@@ -141,7 +144,52 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
     return items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
   };
 
-  // Submit new deal
+  const resetDealForm = () => {
+    setEditingOrderId(null);
+    setEditingOrderNumber('');
+    setCustomerName('');
+    setCustomerBin('');
+    setCustomerPhone('');
+    setCustomerEmail('');
+    setCustomerAddress('');
+    setDealBrand('ONKA');
+    setNotes('');
+    setItems([{ brand: 'ONKA', article: '', name: '', unit: 'шт', quantity: 1, price: 0 }]);
+  };
+
+  const openCreateModal = () => {
+    resetDealForm();
+    setShowCreateModal(true);
+  };
+
+  const openEditModal = (order: any) => {
+    setEditingOrderId(order.id);
+    setEditingOrderNumber(order.orderNumber || '');
+    setCustomerName(order.customerName || '');
+    setCustomerBin(order.customerBin || '');
+    setCustomerPhone(order.customerPhone || '');
+    setCustomerEmail(order.customerEmail || '');
+    setCustomerAddress(order.customerAddress || '');
+    setDealBrand(order.brand || 'ONKA');
+    setNotes(order.notes || '');
+    if (Array.isArray(order.items) && order.items.length > 0) {
+      setItems(
+        order.items.map((it: any) => ({
+          brand: it.brand || order.brand || 'ONKA',
+          article: it.article || '',
+          name: it.name || '',
+          unit: it.unit || 'шт',
+          quantity: Number(it.quantity) || 1,
+          price: Number(it.price) || 0,
+        }))
+      );
+    } else {
+      setItems([{ brand: order.brand || 'ONKA', article: '', name: '', unit: 'шт', quantity: 1, price: 0 }]);
+    }
+    setShowCreateModal(true);
+  };
+
+  // Submit new or edited deal
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
@@ -156,10 +204,12 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
 
     setIsSubmitting(true);
     try {
+      const isEditing = editingOrderId !== null;
       const res = await fetch('/api/sales', {
-        method: 'POST',
+        method: isEditing ? 'PATCH' : 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
+          ...(isEditing ? { id: editingOrderId } : {}),
           customerName,
           customerBin,
           customerPhone,
@@ -173,24 +223,17 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
 
       if (!res.ok) {
         const errData = await res.json();
-        alert(errData.error || 'Ошибка при создании сделки');
+        alert(errData.error || (isEditing ? 'Ошибка при обновлении счета' : 'Ошибка при создании сделки'));
         return;
       }
 
-      const created = await res.json();
+      const saved = await res.json();
       setShowCreateModal(false);
-      // Reset form
-      setCustomerName('');
-      setCustomerBin('');
-      setCustomerPhone('');
-      setCustomerEmail('');
-      setCustomerAddress('');
-      setNotes('');
-      setItems([{ brand: 'ONKA', article: '', name: '', unit: 'шт', quantity: 1, price: 0 }]);
+      resetDealForm();
       fetchOrders();
 
-      if (window.confirm(`Сделка ${created.orderNumber} успешно создана! Распечатать счет на оплату сейчас?`)) {
-        triggerPrint(created);
+      if (window.confirm(isEditing ? `Счет ${saved.orderNumber} успешно обновлен! Распечатать обновленный счет?` : `Сделка ${saved.orderNumber} успешно создана! Распечатать счет на оплату сейчас?`)) {
+        triggerPrint(saved);
       }
     } catch (err) {
       console.error(err);
@@ -348,7 +391,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
 
         {canCreate && (
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateModal}
             className="btn-submit"
             style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', background: 'var(--accent-orange)', color: '#000', fontWeight: 700, margin: 0 }}
           >
@@ -606,6 +649,18 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
                           </button>
                         )}
 
+                        {/* Редактирование счета */}
+                        {(['DRAFT', 'INVOICE_SENT'].includes(order.status) || ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT'].includes(currentUser?.role)) && (
+                          <button
+                            onClick={() => openEditModal(order)}
+                            className="inline-btn"
+                            style={{ padding: '6px 8px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}
+                            title="Исправить / Редактировать счет"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+
                         {/* Удаление черновика */}
                         {(order.status === 'DRAFT' || currentUser?.role === 'ADMIN') && (
                           <button
@@ -725,7 +780,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
           <div className="modal-content" style={{ maxWidth: '850px', width: '95%', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                📄 Новая сделка / Счет на оплату оборудования
+                {editingOrderId ? `✏️ Редактировать счет ${editingOrderNumber}` : '📄 Новая сделка / Счет на оплату оборудования'}
               </h3>
               <button onClick={() => setShowCreateModal(false)} className="inline-btn" style={{ padding: '4px 10px' }}>✕</button>
             </div>
@@ -936,7 +991,9 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
                   className="btn-submit"
                   style={{ padding: '8px 22px', background: 'var(--accent-orange)', color: '#000', fontWeight: 700, margin: 0 }}
                 >
-                  {isSubmitting ? 'Создание...' : 'Сформировать счет на оплату'}
+                  {isSubmitting
+                    ? (editingOrderId ? 'Сохранение...' : 'Создание...')
+                    : (editingOrderId ? '💾 Сохранить изменения' : 'Сформировать счет на оплату')}
                 </button>
               </div>
             </form>

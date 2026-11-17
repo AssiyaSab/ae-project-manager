@@ -191,13 +191,41 @@ export async function PATCH(request: Request) {
       updateData.status = status;
     }
 
-    // 5. Обновление прочих полей
+    // 5. Обновление прочих полей и позиций счета
     if (rest.notes !== undefined) updateData.notes = rest.notes;
     if (rest.customerName) updateData.customerName = rest.customerName;
     if (rest.customerBin !== undefined) updateData.customerBin = rest.customerBin;
     if (rest.customerPhone !== undefined) updateData.customerPhone = rest.customerPhone;
     if (rest.customerEmail !== undefined) updateData.customerEmail = rest.customerEmail;
     if (rest.customerAddress !== undefined) updateData.customerAddress = rest.customerAddress;
+    if (rest.brand !== undefined) updateData.brand = rest.brand;
+
+    if (Array.isArray(rest.items) && rest.items.length > 0) {
+      const vatRate = existingOrder.vatRate || 16;
+      let totalAmount = 0;
+      const itemsData = rest.items.map((it: any) => {
+        const qty = Number(it.quantity) || 1;
+        const price = Number(it.price) || 0;
+        const rowTotal = Math.round(qty * price * 100) / 100;
+        totalAmount += rowTotal;
+        return {
+          brand: it.brand || rest.brand || existingOrder.brand || 'ONKA',
+          article: String(it.article || '').trim(),
+          name: String(it.name || '').trim(),
+          unit: String(it.unit || 'шт').trim(),
+          quantity: qty,
+          price,
+          total: rowTotal,
+        };
+      });
+
+      const vatAmount = Math.round((totalAmount * vatRate / (100 + vatRate)) * 100) / 100;
+      updateData.totalAmount = Math.round(totalAmount * 100) / 100;
+      updateData.vatAmount = vatAmount;
+
+      await prisma.saleOrderItem.deleteMany({ where: { orderId: Number(id) } });
+      updateData.items = { create: itemsData };
+    }
 
     const updated = await prisma.saleOrder.update({
       where: { id: Number(id) },
