@@ -96,15 +96,9 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
             </td>
           </tr>
           <tr>
-            <td colSpan={2} style={{ border: '1px solid #000', padding: '4px 8px' }}>
+            <td colSpan={4} style={{ border: '1px solid #000', padding: '4px 8px' }}>
               ТОО «АзияЭнергоАвтоматика»<br />
               <span style={{ fontSize: '9px', color: '#666' }}>Получатель (Свид. НДС №0072706 Серия 60001 от 23.02.2015г.)</span>
-            </td>
-            <td style={{ border: '1px solid #000', padding: '4px 8px' }}>
-              <strong>Код назн. (КНП)</strong>
-            </td>
-            <td style={{ border: '1px solid #000', padding: '4px 8px' }}>
-              710
             </td>
           </tr>
         </tbody>
@@ -134,9 +128,9 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
             </td>
           </tr>
           <tr>
-            <td style={{ fontWeight: 'bold', verticalAlign: 'top', padding: '3px 0' }}>Основание:</td>
+            <td style={{ fontWeight: 'bold', verticalAlign: 'top', padding: '3px 0' }}>Доставка:</td>
             <td style={{ verticalAlign: 'top', padding: '3px 0' }}>
-              Основной договор / Заказ на поставку оборудования ({order.brand || 'ONKA / WEG'})
+              Самовывоз
             </td>
           </tr>
         </tbody>
@@ -203,7 +197,7 @@ const PrintSaleInvoice = forwardRef<HTMLDivElement, PrintSaleInvoiceProps>(({ or
           <div style={{ width: '48%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
               <span>Руководитель:</span>
-              <span style={{ textDecoration: 'underline' }}>Директор Быкаев К.Ж. (на основании Устава)</span>
+              <span style={{ textDecoration: 'underline' }}>Директор Быкаев К.Ж.</span>
             </div>
             <div style={{ fontSize: '9px', textAlign: 'center', color: '#666' }}>(подпись / расшифровка)</div>
           </div>
