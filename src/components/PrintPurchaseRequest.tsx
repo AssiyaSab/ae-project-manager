@@ -37,7 +37,7 @@ const PrintPurchaseRequest = forwardRef<HTMLDivElement, PrintPurchaseRequestProp
           <div style={{ fontWeight: 'bold' }}>Быкаеву Канату Женисовичу</div>
           <div style={{ marginTop: '10px' }}>от <span style={{ textDecoration: 'underline' }}>{purchase.requester?.name || 'Руководитель проекта (Администрация)'}</span></div>
           <div style={{ fontSize: '10px', textAlign: 'center', marginTop: '2px', marginRight: '50px' }}>(ФИО)</div>
-          <div style={{ marginTop: '5px' }}><span style={{ textDecoration: 'underline' }}>{purchase.requester?.title || 'ГИП / Администрация ТОО'}</span></div>
+          <div style={{ marginTop: '5px' }}><span style={{ textDecoration: 'underline' }}>{purchase.requester?.title || (purchase.requester?.role ? ({ ADMIN: 'Директор', MANAGER: 'Руководитель', CHIEF_ACCOUNTANT: 'Главный бухгалтер', ACCOUNTANT: 'Бухгалтер', SUPPLY: 'Снабженец', WAREHOUSE: 'Кладовщик', ENGINEER: 'Инженер', ASSEMBLER: 'Сборщик' }[purchase.requester.role as string] || purchase.requester.role) : 'ГИП / Администрация ТОО')}</span></div>
           <div style={{ fontSize: '10px', textAlign: 'center', marginTop: '2px', marginRight: '50px' }}>(должность)</div>
           <div style={{ marginTop: '10px' }}>« {day} » {monthStr} {year} г.</div>
         </div>

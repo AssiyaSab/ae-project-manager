@@ -38,8 +38,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     let { employeeId, destination, purpose, startDate, endDate, budget, projectId } = body;
     
-    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(user.role);
+    const isManagement = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(user.role);
     if (!isManagement) {
+      employeeId = user.id;
+    } else if (!employeeId && user.id && user.id > 0 && user.id !== 999) {
       employeeId = user.id;
     }
 

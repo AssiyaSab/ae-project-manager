@@ -60,10 +60,14 @@ export async function POST(request: Request) {
     // Начальный статус
     const initialStatus = requestType === 'EXPENSE' ? 'PENDING_EXPENSE' : 'PENDING_APPROVAL';
 
-    // Безопасное определение requesterId (привязка к реальному пользователю; Мастер-аккаунт id=0 -> null)
-    let finalRequesterId: number | null = requesterId && Number(requesterId) > 0
-      ? Number(requesterId)
-      : (user.id && user.id > 0 && user.id !== 999 ? user.id : null);
+    // Привязка автора заявки к текущему верифицированному пользователю из сессии
+    let finalRequesterId: number | null =
+      user.id && user.id > 0 && user.id !== 999
+        ? user.id
+        : (requesterId && Number(requesterId) > 0 && Number(requesterId) !== 999 ? Number(requesterId) : null);
+    if (isManagement && requesterId && Number(requesterId) > 0 && Number(requesterId) !== 999) {
+      finalRequesterId = Number(requesterId);
+    }
     if (finalRequesterId) {
       const userExists = await prisma.user.findUnique({ where: { id: finalRequesterId }, select: { id: true } });
       if (!userExists) finalRequesterId = null;

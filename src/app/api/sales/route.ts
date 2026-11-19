@@ -92,7 +92,7 @@ export async function POST(request: Request) {
         vatRate,
         vatAmount,
         notes: notes ? notes.trim() : null,
-        createdById: user.id !== 0 ? user.id : null,
+        createdById: user.id && user.id > 0 && user.id !== 999 ? user.id : null,
         items: {
           create: validatedItems,
         },

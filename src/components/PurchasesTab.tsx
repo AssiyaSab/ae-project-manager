@@ -1100,9 +1100,11 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                   </td>
 
                   {/* REQUESTER */}
-                  <td style={{ padding: '12px 10px', verticalAlign: 'top', fontWeight: 600, width: '140px' }}>
-                    <div>{p.requester?.name || 'Сотрудник'}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{p.requester?.title || ''}</div>
+                  <td style={{ padding: '12px 10px', verticalAlign: 'top', width: '160px' }}>
+                    <div style={{ fontWeight: 700 }}>{p.requester?.name || 'Администрация (Мастер-аккаунт)'}</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 400, marginTop: '2px' }}>
+                      {p.requester?.title || (p.requester?.role ? ({ ADMIN: 'Директор', MANAGER: 'Руководитель', CHIEF_ACCOUNTANT: 'Главный бухгалтер', ACCOUNTANT: 'Бухгалтер', SUPPLY: 'Снабженец', WAREHOUSE: 'Кладовщик', ENGINEER: 'Инженер', ASSEMBLER: 'Сборщик' }[p.requester.role as string] || p.requester.role) : 'ГИП / Руководство')}
+                    </div>
                   </td>
 
                   {/* TITLE, PROJECT & SUPPLIER DETAILS */}
