@@ -53,8 +53,8 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            paddingTop: '48px',
-            paddingBottom: '18px',
+            paddingTop: '52px',
+            paddingBottom: '12px',
             textAlign: 'center',
             boxSizing: 'border-box',
           }}
@@ -65,17 +65,17 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
             (организации)
           </div>
 
-          <div style={{ fontSize: '12px', marginTop: '35px' }}>
+          <div style={{ fontSize: '12px', marginTop: '30px' }}>
             от <span style={{ borderBottom: '1px solid #000', padding: '0 8px' }}>{orderDate}</span>
           </div>
 
-          <div style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '45px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', marginTop: '40px' }}>
             М.П.
           </div>
         </div>
 
         {/* Правая колонка */}
-        <div style={{ width: '72%', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ width: '72%', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           {/* Шапка организации */}
           <div style={{ textAlign: 'center', marginBottom: '6px' }}>
             <div style={{ fontWeight: 'bold', fontSize: '13.5px' }}>
@@ -94,42 +94,48 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
             КОМАНДИРОВОЧНОЕ УДОСТОВЕРЕНИЕ № {trip.id}
           </div>
 
-          {/* Выдано */}
-          <div>
-            <div style={{ fontSize: '11px', color: '#333' }}>Выдано</div>
+          {/* Выдано (под линией) */}
+          <div style={{ textAlign: 'center' }}>
             <div style={{ borderBottom: '1px solid #000', paddingBottom: '2px', fontWeight: 500 }}>
               {trip.employee?.name || '________________________'}, {trip.employee?.title || 'специалист'}
             </div>
+            <div style={{ fontSize: '10px', color: '#444', marginTop: '1px' }}>Выдано</div>
           </div>
 
-          {/* Командированному в */}
-          <div>
-            <div style={{ fontSize: '11px', color: '#333' }}>командированному(й) в</div>
+          {/* командированному(й) в (под линией) */}
+          <div style={{ textAlign: 'center', marginTop: '2px' }}>
             <div style={{ borderBottom: '1px solid #000', paddingBottom: '2px', fontWeight: 500 }}>
               {trip.destination}
             </div>
+            <div style={{ fontSize: '10px', color: '#444', marginTop: '1px' }}>командированному(й) в</div>
           </div>
 
           {/* Срок командировки */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
-            <span>Срок командировки</span>
-            <span style={{ borderBottom: '1px solid #000', padding: '0 8px', fontWeight: 500 }}>
-              {diffDays} {daysWord}
-            </span>
-            <span>с</span>
-            <span style={{ borderBottom: '1px solid #000', padding: '0 8px', fontWeight: 500 }}>
-              {formatDate(trip.startDate)}
-            </span>
-            <span>по</span>
-            <span style={{ borderBottom: '1px solid #000', padding: '0 8px', fontWeight: 500 }}>
-              {formatDate(trip.endDate)}
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginTop: '4px' }}>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ borderBottom: '1px solid #000', paddingBottom: '2px', fontWeight: 500 }}>
+                {diffDays} {daysWord}
+              </div>
+              <div style={{ fontSize: '10px', color: '#444', marginTop: '1px' }}>Срок командировки</div>
+            </div>
+            <div style={{ width: '28%', textAlign: 'center' }}>
+              <div style={{ borderBottom: '1px solid #000', paddingBottom: '2px', fontWeight: 500 }}>
+                {formatDate(trip.startDate)}
+              </div>
+              <div style={{ fontSize: '10px', color: '#444', marginTop: '1px' }}>с</div>
+            </div>
+            <div style={{ width: '28%', textAlign: 'center' }}>
+              <div style={{ borderBottom: '1px solid #000', paddingBottom: '2px', fontWeight: 500 }}>
+                {formatDate(trip.endDate)}
+              </div>
+              <div style={{ fontSize: '10px', color: '#444', marginTop: '1px' }}>по</div>
+            </div>
           </div>
 
           {/* Направляется для */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '2px' }}>
-            <span style={{ whiteSpace: 'nowrap' }}>Направляется для</span>
-            <span style={{ borderBottom: '1px solid #000', flex: 1, paddingBottom: '1px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' }}>
+            <span style={{ whiteSpace: 'nowrap', fontSize: '11.5px' }}>Направляется для</span>
+            <span style={{ borderBottom: '1px solid #000', flex: 1, paddingBottom: '1px', textAlign: 'center' }}>
               {trip.purpose || 'решения производственных вопросов'}
             </span>
           </div>
@@ -137,28 +143,32 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
           {/* Основание */}
           <div style={{ marginTop: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ whiteSpace: 'nowrap' }}>Основание: Приказ (распоряжение)</span>
+              <span style={{ whiteSpace: 'nowrap', fontSize: '11.5px' }}>Основание: Приказ (распоряжение)</span>
               <span style={{ borderBottom: '1px solid #000', flex: 1, textAlign: 'center', paddingBottom: '1px' }}>
                 О командировании
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px', paddingLeft: '65px' }}>
-              <span>от</span>
-              <span style={{ borderBottom: '1px solid #000', padding: '0 10px' }}>{orderDate}</span>
-              <span>№</span>
-              <span style={{ borderBottom: '1px solid #000', padding: '0 12px', fontWeight: 500 }}>{orderNumber}</span>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginTop: '4px', paddingLeft: '65px' }}>
+              <div style={{ textAlign: 'center', minWidth: '105px' }}>
+                <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px' }}>{orderDate}</div>
+                <div style={{ fontSize: '10px', color: '#444' }}>от</div>
+              </div>
+              <div style={{ textAlign: 'center', minWidth: '85px' }}>
+                <div style={{ borderBottom: '1px solid #000', paddingBottom: '1px', fontWeight: 500 }}>{orderNumber}</div>
+                <div style={{ fontSize: '10px', color: '#444' }}>№</div>
+              </div>
             </div>
           </div>
 
           {/* Действительно по предъявлению паспорта */}
-          <div style={{ marginTop: '4px', fontSize: '11.5px' }}>
+          <div style={{ marginTop: '4px', fontSize: '11.5px', textAlign: 'center' }}>
             Действительно по предъявлению паспорта
           </div>
         </div>
       </div>
 
       {/* Подпись директора и печать */}
-      <div style={{ position: 'relative', marginTop: '22px', marginBottom: '26px', paddingLeft: '28%' }}>
+      <div style={{ position: 'relative', marginTop: '28px', marginBottom: '34px', paddingLeft: '28%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12.5px', fontWeight: 'bold', paddingRight: '25px' }}>
           <span>Директор</span>
           <span>_______________________</span>
@@ -166,19 +176,19 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
         </div>
 
         {isApproved && (
-          <div style={{ position: 'absolute', left: '46%', top: '-44px', opacity: 0.88, pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: '47%', top: '-36px', opacity: 0.88, pointerEvents: 'none' }}>
             <img
               src={DIRECTOR_STAMP_SIGNATURE_DATA_URI}
               alt="Печать и подпись директора"
-              style={{ width: '130px', height: '130px' }}
+              style={{ width: '96px', height: '96px' }}
             />
           </div>
         )}
       </div>
 
-      {/* Нижний блок: Отметки о выбытии и прибытии */}
-      <div style={{ marginTop: '20px' }}>
-        <div style={{ fontSize: '11.5px', marginBottom: '10px', fontWeight: 'bold' }}>
+      {/* Нижний блок: Отметки о выбытии и прибытии (без грубых черных рамок, как в бланке KomKsivf) */}
+      <div style={{ marginTop: '18px' }}>
+        <div style={{ fontSize: '11.5px', marginBottom: '14px', fontWeight: 'bold' }}>
           Отметка о выбытии в командировку, прибытии в пункты назначения и выбытии из них:
         </div>
 
@@ -186,21 +196,21 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
           <tbody>
             {[0, 1, 2, 3].map((rowIdx) => (
               <tr key={rowIdx}>
-                <td style={{ border: '1px solid #000', padding: '10px 10px 6px 10px', width: '50%', verticalAlign: 'top' }}>
+                <td style={{ padding: '10px 14px 8px 0', width: '50%', verticalAlign: 'top' }}>
                   <div>Выбыл из ___________________________________</div>
                   <div style={{ marginTop: '10px' }}>
                     Подпись ___________ &nbsp; &quot;____&quot; ___________ {docYear} г.
                   </div>
-                  <div style={{ marginTop: '6px', textAlign: 'center', fontSize: '10px', color: '#444' }}>
+                  <div style={{ marginTop: '5px', textAlign: 'center', fontSize: '10px', color: '#444' }}>
                     печать
                   </div>
                 </td>
-                <td style={{ border: '1px solid #000', padding: '10px 10px 6px 10px', width: '50%', verticalAlign: 'top' }}>
+                <td style={{ padding: '10px 0 8px 14px', width: '50%', verticalAlign: 'top' }}>
                   <div>Прибыл в __________________________________</div>
                   <div style={{ marginTop: '10px' }}>
                     Подпись ___________ &nbsp; &quot;____&quot; __________ {docYear} г.
                   </div>
-                  <div style={{ marginTop: '6px', textAlign: 'center', fontSize: '10px', color: '#444' }}>
+                  <div style={{ marginTop: '5px', textAlign: 'center', fontSize: '10px', color: '#444' }}>
                     печать
                   </div>
                 </td>
@@ -211,7 +221,7 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
       </div>
 
       {/* Примечание */}
-      <div style={{ marginTop: '10px', fontSize: '10.5px' }}>
+      <div style={{ marginTop: '12px', fontSize: '10.5px' }}>
         <strong>Примечание:</strong> при выезде в несколько пунктов отметки о прибытии и выбытии делаются отдельно в каждом из них.
       </div>
     </div>
