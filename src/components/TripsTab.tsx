@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/formatters';
 import { useRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import PrintTripOrder from './PrintTripOrder';
+import PrintTripCertificate from './PrintTripCertificate';
 
 export default function TripsTab({ currentUser, projects, users }: any) {
   const [trips, setTrips] = useState<any[]>([]);
@@ -31,6 +32,20 @@ export default function TripsTab({ currentUser, projects, users }: any) {
     setActiveTripForPrint(trip);
     setTimeout(() => {
       handlePrintTrip();
+    }, 100);
+  };
+
+  const tripCertPrintRef = useRef(null);
+  const [activeTripForCertPrint, setActiveTripForCertPrint] = useState<any>(null);
+  const handlePrintTripCert = useReactToPrint({
+    contentRef: tripCertPrintRef,
+    documentTitle: `Komandirovochnoe_Udostoverenie_${activeTripForCertPrint?.id || ''}`
+  });
+
+  const generateTripCertificatePDF = (trip: any) => {
+    setActiveTripForCertPrint(trip);
+    setTimeout(() => {
+      handlePrintTripCert();
     }, 100);
   };
 
@@ -201,9 +216,16 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                     </span>
                                     </td>
                   <td style={{ padding: '10px' }}>
-                    
-                      <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.8rem' }}>📄 PDF</button>
-                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
+                      <button onClick={() => generateTripPDF(t)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.75rem', padding: '4px 8px', whiteSpace: 'nowrap' }}>
+                        📄 Приказ (PDF)
+                      </button>
+                      {(t.status === 'APPROVED' || t.status === 'COMPLETED') && (
+                        <button onClick={() => generateTripCertificatePDF(t)} className="inline-btn" style={{ background: '#10b981', color: '#fff', fontSize: '0.75rem', padding: '4px 8px', whiteSpace: 'nowrap' }}>
+                          📄 Командировочное удостоверение (PDF)
+                        </button>
+                      )}
+                    </div>
                   </td>
                   {['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                     <td style={{ padding: '10px', display: 'flex', gap: '5px' }}>
@@ -268,6 +290,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
 
       <div style={{ display: 'none' }}>
         <PrintTripOrder ref={tripPrintRef} trip={activeTripForPrint} />
+        <PrintTripCertificate ref={tripCertPrintRef} trip={activeTripForCertPrint} />
       </div>
     </div>
   );
