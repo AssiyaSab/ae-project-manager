@@ -6,8 +6,22 @@ import { formatDate } from '@/lib/formatters';
 import { useReactToPrint } from 'react-to-print';
 import PrintPurchaseRequest from './PrintPurchaseRequest';
 
-export default function PurchasesTab({ currentUser, projects, users }: any) {
+export default function PurchasesTab({ currentUser, projects, users, highlightPurchaseId }: any) {
   const [purchases, setPurchases] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (highlightPurchaseId) {
+      setStatusFilter('ALL');
+      setDisciplineFilter('ALL');
+      setProjectFilter('ALL');
+      setTimeout(() => {
+        const el = document.getElementById(`purchase-row-${highlightPurchaseId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 250);
+    }
+  }, [highlightPurchaseId, purchases.length]);
 
   // Creation State
   const [purchaseType, setPurchaseType] = useState<'INVOICE' | 'EXPENSE'>('INVOICE');
@@ -1069,7 +1083,15 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
             </thead>
             <tbody>
               {filteredPurchases.map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                <tr
+                  key={p.id}
+                  id={`purchase-row-${p.id}`}
+                  style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    background: highlightPurchaseId === p.id ? 'rgba(59, 130, 246, 0.14)' : undefined,
+                    outline: highlightPurchaseId === p.id ? '2px solid #3b82f6' : undefined,
+                  }}
+                >
                   
                   {/* DATE & TYPE */}
                   <td style={{ padding: '12px 10px', verticalAlign: 'top', width: '110px' }}>
@@ -1291,7 +1313,7 @@ export default function PurchasesTab({ currentUser, projects, users }: any) {
                             style={{ background: '#10b981', color: '#fff', fontWeight: 600 }}
                             title="Главный бухгалтер: подтвердить оплату счета"
                           >
-                            💳 Оплачено
+                            💳 Подтвердить оплату
                           </button>
                         ) : isAccountant ? (
                           <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>

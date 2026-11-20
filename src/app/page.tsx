@@ -65,6 +65,7 @@ interface ChatMessage {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks' | 'sales'>('dashboard');
+  const [highlightPurchaseId, setHighlightPurchaseId] = useState<number | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
   // Auth State
@@ -2001,19 +2002,50 @@ export default function Home() {
                   <div key={p.id} style={{ marginBottom: '20px' }}>
                     <h3 style={{ color: 'var(--accent-cyan)', marginBottom: '10px' }}>Проект: {p.name}</h3>
                     <div className="tasks-list">
-                      {myTasks.map(t => (
-                        <div key={t.id} className="task-item" style={{ borderLeft: `3px solid ${t.status === 'DONE' ? '#10b981' : t.status === 'BLOCKED' ? '#ef4444' : '#3b82f6'}` }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>{t.name}</div>
-                              {t.description && <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px' }}>{t.description}</div>}
+                      {myTasks.map(t => {
+                        const purMatch = (t.description || '').match(/(?:по заявке|Заявка на закупку ТМЦ)\s*#(\d+)/i);
+                        const linkedPurchaseId = purMatch ? Number(purMatch[1]) : null;
+                        return (
+                          <div
+                            key={t.id}
+                            className="task-item"
+                            onClick={() => {
+                              if (linkedPurchaseId) {
+                                setHighlightPurchaseId(linkedPurchaseId);
+                                setActiveTab('purchases');
+                              }
+                            }}
+                            style={{
+                              borderLeft: `3px solid ${t.status === 'DONE' ? '#10b981' : t.status === 'BLOCKED' ? '#ef4444' : '#3b82f6'}`,
+                              cursor: linkedPurchaseId ? 'pointer' : 'default',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>{t.name}</div>
+                                {t.description && <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '4px', whiteSpace: 'pre-line' }}>{t.description}</div>}
+                                {linkedPurchaseId && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setHighlightPurchaseId(linkedPurchaseId);
+                                      setActiveTab('purchases');
+                                    }}
+                                    className="inline-btn"
+                                    style={{ marginTop: '8px', background: '#3b82f6', color: '#fff', fontSize: '0.78rem', padding: '4px 10px' }}
+                                  >
+                                    🛒 Открыть заявку #{linkedPurchaseId} в Закупках ТМЦ
+                                  </button>
+                                )}
+                              </div>
+                              <span className={`badge ${t.status === 'DONE' ? 'done' : t.status === 'BLOCKED' ? 'blocked' : 'in_progress'}`}>
+                                {t.status}
+                              </span>
                             </div>
-                            <span className={`badge ${t.status === 'DONE' ? 'done' : t.status === 'BLOCKED' ? 'blocked' : 'in_progress'}`}>
-                              {t.status}
-                            </span>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -2024,8 +2056,8 @@ export default function Home() {
             </section>
           )}
 
-                    {activeTab === 'purchases' && (
-            <PurchasesTab currentUser={currentUser} projects={projects} users={users} />
+          {activeTab === 'purchases' && (
+            <PurchasesTab currentUser={currentUser} projects={projects} users={users} highlightPurchaseId={highlightPurchaseId} />
           )}
 
           {activeTab === 'trips' && (

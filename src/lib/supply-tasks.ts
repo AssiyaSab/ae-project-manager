@@ -145,13 +145,18 @@ export async function createOrUpdatePaymentTask(purchaseId: number) {
     }
 
     const targetAssignees = chiefAccountants.map(u => ({ id: u.id }));
+    const publicBaseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ae-project-manager-nu.vercel.app';
+    const taskInvoiceLink = purchase.invoiceFileUrl
+      ? (purchase.invoiceFileUrl.startsWith('data:') ? `${publicBaseUrl}/api/purchases/invoice-file?id=${purchase.id}` : purchase.invoiceFileUrl)
+      : '';
+
     const taskName = `💳 Оплата счета: ${purchase.title} (${purchase.amount.toLocaleString('ru-RU')} ₸)`;
     const taskDesc = `Счет на оплату ТМЦ по заявке #${purchase.id} утвержден Директором к оплате.\n` +
       `Проект: «${purchase.project.name}».\n` +
       `Поставщик: ${purchase.supplierName || 'Поставщик'}.\n` +
       `Счет: №${purchase.invoiceNumber || 'б/н'}.\n` +
       `Сумма к оплате: ${purchase.amount.toLocaleString('ru-RU')} ₸.\n` +
-      (purchase.invoiceFileUrl ? `📎 Ссылка на счет: ${purchase.invoiceFileUrl}\n` : '') +
+      (taskInvoiceLink ? `📎 Ссылка на счет: ${taskInvoiceLink}\n` : '') +
       `👉 Задача Главного бухгалтера: провести платеж в клиент-банке и подтвердить оплату.`;
 
     if (purchase.paymentTaskId) {
