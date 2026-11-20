@@ -4,6 +4,8 @@ import { sendTelegramMessage, forwardTelegramMessage, editTelegramMessageText } 
 import { formatDate } from './formatters';
 import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask, createOrUpdatePaymentTask, completePaymentTask } from './supply-tasks';
 import { isChiefAccountantUser } from './auth';
+import { calculateTripBudget } from './tripRules';
+import { getTripRatesFromDb } from './tripRulesServer';
 
 export interface BotResponse {
   replyText: string;
@@ -1131,6 +1133,20 @@ export async function handleIncomingBotMessage(
       const data = JSON.parse(tripDatesLog.details);
       data.datesText = cleanText;
 
+      const { start, end } = parseDateRange(cleanText);
+      const rates = await getTripRatesFromDb();
+      const calc = calculateTripBudget({
+        startDate: start,
+        endDate: end,
+        tripType: 'KZ',
+        kzRate: rates.kzRate,
+        abroadRate: rates.abroadRate,
+      });
+
+      data.startDate = start.toISOString();
+      data.endDate = end.toISOString();
+      data.calc = calc;
+
       await prisma.auditLog.delete({ where: { id: tripDatesLog.id } }).catch(() => {});
 
       await prisma.auditLog.create({
@@ -1142,15 +1158,27 @@ export async function handleIncomingBotMessage(
       });
 
       return {
-        replyText: `📅 Даты: *${cleanText}*\n\n` +
-          `Шаг 4 из 4: Введите *ориентировочный бюджет* в тенге (проезд, суточные, проживание):`
+        replyText:
+          `📅 *Даты:* с ${formatDate(start)} по ${formatDate(end)} (*${calc.daysCount} дн.*)\n` +
+          `💰 *Суточные по норме (${calc.dailyAllowanceRate.toLocaleString('ru-RU')} ₸/сут):* *${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸*\n\n` +
+          `Шаг 4 из 4: Если дополнительные расходы не требуются, нажмите кнопку ниже. Если нужны средства на билеты / проживание — просто введите дополнительную сумму в тенге (числом):`,
+        keyboard: {
+          inline_keyboard: [
+            [
+              {
+                text: `✅ Только суточные (${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸)`,
+                callback_data: 'trip_wiz_only_daily',
+              }
+            ]
+          ]
+        }
       };
     } catch (e) {
       console.error(e);
     }
   }
 
-  // Handle Trip Budget: TRIP_WIZ_BUDGET
+  // Handle Trip Budget: TRIP_WIZ_BUDGET (кнопка "Только суточные" или ввод суммы на проезд/проживание)
   const tripBudgetLog = await prisma.auditLog.findFirst({
     where: {
       userId: user.id,
@@ -1160,13 +1188,31 @@ export async function handleIncomingBotMessage(
     orderBy: { createdAt: 'desc' }
   });
 
-  if (tripBudgetLog && tripBudgetLog.details && !cleanText.startsWith('/') && !cleanText.startsWith('trip_') && !cleanText.startsWith('pur_')) {
+  if (
+    tripBudgetLog &&
+    tripBudgetLog.details &&
+    (cleanText === 'trip_wiz_only_daily' || (!cleanText.startsWith('/') && !cleanText.startsWith('trip_') && !cleanText.startsWith('pur_')))
+  ) {
     try {
       const data = JSON.parse(tripBudgetLog.details);
-      const numMatch = cleanText.replace(/\s/g, '').match(/\d+/);
-      const budget = numMatch ? Number(numMatch[0]) : 50000;
+      let extraTransport = 0;
+      if (cleanText !== 'trip_wiz_only_daily') {
+        const numMatch = cleanText.replace(/\s/g, '').match(/\d+/);
+        extraTransport = numMatch ? Number(numMatch[0]) : 0;
+      }
 
-      const { start, end } = parseDateRange(data.datesText || '');
+      const start = data.startDate ? new Date(data.startDate) : parseDateRange(data.datesText || '').start;
+      const end = data.endDate ? new Date(data.endDate) : parseDateRange(data.datesText || '').end;
+      const rates = await getTripRatesFromDb();
+      const calc = calculateTripBudget({
+        startDate: start,
+        endDate: end,
+        tripType: 'KZ',
+        kzRate: rates.kzRate,
+        abroadRate: rates.abroadRate,
+        transportCost: extraTransport,
+        accommodationCost: 0,
+      });
 
       const trip = await prisma.businessTrip.create({
         data: {
@@ -1175,7 +1221,14 @@ export async function handleIncomingBotMessage(
           purpose: `Выездные работы по проекту ${data.projectName || ''}`.trim(),
           startDate: start,
           endDate: end,
-          budget: budget,
+          tripType: calc.tripType,
+          daysCount: calc.daysCount,
+          dailyAllowanceRate: calc.dailyAllowanceRate,
+          dailyAllowanceTotal: calc.dailyAllowanceTotal,
+          transportCost: calc.transportCost,
+          accommodationCost: calc.accommodationCost,
+          totalBudget: calc.totalBudget,
+          budget: calc.totalBudget,
           projectId: data.projectId > 0 ? Number(data.projectId) : null,
           status: 'PENDING',
         },
@@ -1193,8 +1246,10 @@ export async function handleIncomingBotMessage(
         `• *Сотрудник:* ${user.name} (${user.role})\n` +
         `• *Пункт назначения:* ${trip.destination}\n` +
         `• *Объект / Проект:* ${trip.project?.name || 'Вне проекта'}\n` +
-        `• *Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)}\n` +
-        `• *Бюджет:* ${trip.budget.toLocaleString('ru-RU')} ₸\n\n` +
+        `• *Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)} (${calc.daysCount} дн.)\n` +
+        `• *Суточные:* ${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸ (${calc.daysCount} × ${calc.dailyAllowanceRate.toLocaleString('ru-RU')} ₸)\n` +
+        (calc.transportCost > 0 ? `• *Проезд / билеты / проживание:* ${calc.transportCost.toLocaleString('ru-RU')} ₸\n` : '') +
+        `• *Итого к выдаче:* *${calc.totalBudget.toLocaleString('ru-RU')} ₸*\n\n` +
         `👉 Согласовать командировку?`;
 
       const keyboard = {
@@ -1215,8 +1270,10 @@ export async function handleIncomingBotMessage(
       return {
         replyText: `🎉 *Заявка на командировку #${trip.id} успешно создана!*\n\n` +
           `• *Город:* ${trip.destination}\n` +
-          `• *Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)}\n` +
-          `• *Бюджет:* ${trip.budget.toLocaleString('ru-RU')} ₸\n\n` +
+          `• *Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)} (${calc.daysCount} дн.)\n` +
+          `• *Суточные:* ${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸\n` +
+          (calc.transportCost > 0 ? `• *Билеты / проживание:* ${calc.transportCost.toLocaleString('ru-RU')} ₸\n` : '') +
+          `• *Итого к выдаче:* *${calc.totalBudget.toLocaleString('ru-RU')} ₸*\n\n` +
           `⏳ Заявка направлена Директору на согласование.`,
         keyboard: defaultUserKeyboard,
       };

@@ -4,7 +4,9 @@ import { formatDate } from '@/lib/formatters';
 
 export const dynamic = 'force-dynamic';
 
-import { validateAuth, validateApprover, createAuditLog } from '@/lib/auth';
+import { validateAuth, validateApprover, createAuditLog, isChiefAccountantUser } from '@/lib/auth';
+import { calculateTripBudget } from '@/lib/tripRules';
+import { getTripRatesFromDb } from '@/lib/tripRulesServer';
 
 export async function GET(request: Request) {
   const user = await validateAuth(request);
@@ -12,7 +14,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
-    const isManagement = ['ADMIN', 'MANAGER', 'ACCOUNTANT'].includes(user.role);
+    const isManagement = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(user.role);
 
     const trips = await prisma.businessTrip.findMany({
       where: isManagement ? undefined : { employeeId: user.id },
@@ -36,7 +38,17 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    let { employeeId, destination, purpose, startDate, endDate, budget, projectId } = body;
+    let {
+      employeeId,
+      destination,
+      purpose,
+      startDate,
+      endDate,
+      tripType,
+      transportCost,
+      accommodationCost,
+      projectId,
+    } = body;
     
     const isManagement = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(user.role);
     if (!isManagement) {
@@ -45,9 +57,20 @@ export async function POST(request: Request) {
       employeeId = user.id;
     }
 
-    if (!employeeId || !destination || !purpose || !startDate || !endDate || budget == null) {
+    if (!employeeId || !destination || !purpose || !startDate || !endDate) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    const rates = await getTripRatesFromDb();
+    const calc = calculateTripBudget({
+      startDate,
+      endDate,
+      tripType: tripType || 'KZ',
+      kzRate: rates.kzRate,
+      abroadRate: rates.abroadRate,
+      transportCost,
+      accommodationCost,
+    });
 
     const trip = await prisma.businessTrip.create({
       data: {
@@ -56,7 +79,14 @@ export async function POST(request: Request) {
         purpose,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
-        budget: Number(budget),
+        tripType: calc.tripType,
+        daysCount: calc.daysCount,
+        dailyAllowanceRate: calc.dailyAllowanceRate,
+        dailyAllowanceTotal: calc.dailyAllowanceTotal,
+        transportCost: calc.transportCost,
+        accommodationCost: calc.accommodationCost,
+        totalBudget: calc.totalBudget,
+        budget: calc.totalBudget,
         projectId: projectId ? Number(projectId) : null,
       },
       include: { employee: true, project: true }
@@ -70,10 +100,13 @@ export async function POST(request: Request) {
       
       const message = `✈️ *Оформлена новая командировка*\n\n` +
         `*Сотрудник:* ${trip.employee?.name || 'Система'}\n` +
-        `*Пункт назначения:* ${trip.destination}\n` +
+        `*Пункт назначения:* ${trip.destination} (${calc.tripType === 'ABROAD' ? 'За рубеж' : 'По РК'})\n` +
         `*Цель:* ${trip.purpose}\n` +
-        `*Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)}\n` +
-        `*Бюджет:* ${trip.budget.toLocaleString('ru-RU')} ₸\n\n` +
+        `*Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)} (${calc.daysCount} дн.)\n` +
+        `*Суточные:* ${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸ (${calc.daysCount} дн. × ${calc.dailyAllowanceRate.toLocaleString('ru-RU')} ₸)\n` +
+        (calc.transportCost > 0 ? `*Проезд / билеты:* ${calc.transportCost.toLocaleString('ru-RU')} ₸\n` : '') +
+        (calc.accommodationCost > 0 ? `*Проживание:* ${calc.accommodationCost.toLocaleString('ru-RU')} ₸\n` : '') +
+        `*Итого к выдаче:* *${calc.totalBudget.toLocaleString('ru-RU')} ₸*\n\n` +
         `👉 Согласовать командировку?`;
 
       const keyboard = {
@@ -103,15 +136,35 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  if (!(await validateAuth(request))) {
+  const user = await validateAuth(request);
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const body = await request.json();
-    const { id, status, employeeId, destination, purpose, startDate, endDate, budget, projectId } = body;
+    const {
+      id,
+      status,
+      employeeId,
+      destination,
+      purpose,
+      startDate,
+      endDate,
+      tripType,
+      transportCost,
+      accommodationCost,
+      totalBudget,
+      budget,
+      projectId,
+    } = body;
     
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    const existing = await prisma.businessTrip.findUnique({ where: { id: Number(id) } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
     }
 
     const data: any = {};
@@ -121,12 +174,46 @@ export async function PATCH(request: Request) {
     if (purpose !== undefined) data.purpose = purpose;
     if (startDate !== undefined) data.startDate = new Date(startDate);
     if (endDate !== undefined) data.endDate = new Date(endDate);
-    if (budget !== undefined) data.budget = Number(budget);
     if (projectId !== undefined) data.projectId = projectId ? Number(projectId) : null;
+
+    if (
+      startDate !== undefined ||
+      endDate !== undefined ||
+      tripType !== undefined ||
+      transportCost !== undefined ||
+      accommodationCost !== undefined
+    ) {
+      const rates = await getTripRatesFromDb();
+      const calc = calculateTripBudget({
+        startDate: startDate ?? existing.startDate,
+        endDate: endDate ?? existing.endDate,
+        tripType: tripType ?? existing.tripType,
+        kzRate: rates.kzRate,
+        abroadRate: rates.abroadRate,
+        transportCost: transportCost !== undefined ? transportCost : existing.transportCost,
+        accommodationCost: accommodationCost !== undefined ? accommodationCost : existing.accommodationCost,
+      });
+      data.tripType = calc.tripType;
+      data.daysCount = calc.daysCount;
+      data.dailyAllowanceRate = calc.dailyAllowanceRate;
+      data.dailyAllowanceTotal = calc.dailyAllowanceTotal;
+      data.transportCost = calc.transportCost;
+      data.accommodationCost = calc.accommodationCost;
+      data.totalBudget = calc.totalBudget;
+      data.budget = calc.totalBudget;
+    }
+
+    // ADMIN и Главный бухгалтер могут скорректировать итоговую сумму при нестандартных условиях
+    const explicitBudget = totalBudget !== undefined ? Number(totalBudget) : (budget !== undefined ? Number(budget) : undefined);
+    if (explicitBudget !== undefined && !isNaN(explicitBudget) && isChiefAccountantUser(user)) {
+      data.totalBudget = explicitBudget;
+      data.budget = explicitBudget;
+    }
 
     const trip = await prisma.businessTrip.update({
       where: { id: Number(id) },
       data,
+      include: { employee: true, project: true },
     });
 
     return NextResponse.json(trip);
