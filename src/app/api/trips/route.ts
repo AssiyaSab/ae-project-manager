@@ -38,17 +38,16 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    let {
-      employeeId,
+    const {
       destination,
       purpose,
       startDate,
       endDate,
-      tripType,
       transportCost,
       accommodationCost,
       projectId,
     } = body;
+    let { employeeId } = body;
     
     const isManagement = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(user.role);
     if (!isManagement) {
@@ -61,13 +60,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    const targetEmployee = await prisma.user.findUnique({
+      where: { id: Number(employeeId) },
+      select: { id: true, name: true },
+    });
+
     const rates = await getTripRatesFromDb();
     const calc = calculateTripBudget({
       startDate,
       endDate,
-      tripType: tripType || 'KZ',
-      kzRate: rates.kzRate,
-      abroadRate: rates.abroadRate,
+      employeeName: targetEmployee?.name,
+      rates,
       transportCost,
       accommodationCost,
     });
@@ -100,7 +103,7 @@ export async function POST(request: Request) {
       
       const message = `✈️ *Оформлена новая командировка*\n\n` +
         `*Сотрудник:* ${trip.employee?.name || 'Система'}\n` +
-        `*Пункт назначения:* ${trip.destination} (${calc.tripType === 'ABROAD' ? 'За рубеж' : 'По РК'})\n` +
+        `*Пункт назначения:* ${trip.destination}\n` +
         `*Цель:* ${trip.purpose}\n` +
         `*Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)} (${calc.daysCount} дн.)\n` +
         `*Суточные:* ${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸ (${calc.daysCount} дн. × ${calc.dailyAllowanceRate.toLocaleString('ru-RU')} ₸)\n` +
@@ -150,7 +153,6 @@ export async function PATCH(request: Request) {
       purpose,
       startDate,
       endDate,
-      tripType,
       transportCost,
       accommodationCost,
       totalBudget,
@@ -177,19 +179,23 @@ export async function PATCH(request: Request) {
     if (projectId !== undefined) data.projectId = projectId ? Number(projectId) : null;
 
     if (
+      employeeId !== undefined ||
       startDate !== undefined ||
       endDate !== undefined ||
-      tripType !== undefined ||
       transportCost !== undefined ||
       accommodationCost !== undefined
     ) {
+      const targetEmployeeId = employeeId !== undefined ? Number(employeeId) : existing.employeeId;
+      const targetEmployee = await prisma.user.findUnique({
+        where: { id: targetEmployeeId },
+        select: { name: true },
+      });
       const rates = await getTripRatesFromDb();
       const calc = calculateTripBudget({
         startDate: startDate ?? existing.startDate,
         endDate: endDate ?? existing.endDate,
-        tripType: tripType ?? existing.tripType,
-        kzRate: rates.kzRate,
-        abroadRate: rates.abroadRate,
+        employeeName: targetEmployee?.name,
+        rates,
         transportCost: transportCost !== undefined ? transportCost : existing.transportCost,
         accommodationCost: accommodationCost !== undefined ? accommodationCost : existing.accommodationCost,
       });

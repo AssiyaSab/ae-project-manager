@@ -25,32 +25,49 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const kzRate = Number(body.kzRate);
-    const abroadRate = Number(body.abroadRate);
+    const tier3MrpRate = Number(body.tier3MrpRate);
+    const tierSeniorRate = Number(body.tierSeniorRate);
+    const standardRate = Number(body.standardRate);
 
-    if (!kzRate || kzRate <= 0 || !abroadRate || abroadRate <= 0) {
-      return NextResponse.json({ error: 'Ставки суточных должны быть положительными числами' }, { status: 400 });
+    if (
+      !tier3MrpRate ||
+      tier3MrpRate <= 0 ||
+      !tierSeniorRate ||
+      tierSeniorRate <= 0 ||
+      !standardRate ||
+      standardRate <= 0
+    ) {
+      return NextResponse.json(
+        { error: 'Все ставки суточных должны быть положительными числами' },
+        { status: 400 }
+      );
     }
 
-    await prisma.systemSetting.upsert({
-      where: { key: 'TRIP_RATE_KZ' },
-      update: { value: String(kzRate) },
-      create: { key: 'TRIP_RATE_KZ', value: String(kzRate) },
-    });
-
-    await prisma.systemSetting.upsert({
-      where: { key: 'TRIP_RATE_ABROAD' },
-      update: { value: String(abroadRate) },
-      create: { key: 'TRIP_RATE_ABROAD', value: String(abroadRate) },
-    });
+    await Promise.all([
+      prisma.systemSetting.upsert({
+        where: { key: 'TRIP_RATE_TIER_3MRP' },
+        update: { value: String(tier3MrpRate) },
+        create: { key: 'TRIP_RATE_TIER_3MRP', value: String(tier3MrpRate) },
+      }),
+      prisma.systemSetting.upsert({
+        where: { key: 'TRIP_RATE_TIER_SENIOR' },
+        update: { value: String(tierSeniorRate) },
+        create: { key: 'TRIP_RATE_TIER_SENIOR', value: String(tierSeniorRate) },
+      }),
+      prisma.systemSetting.upsert({
+        where: { key: 'TRIP_RATE_STANDARD' },
+        update: { value: String(standardRate) },
+        create: { key: 'TRIP_RATE_STANDARD', value: String(standardRate) },
+      }),
+    ]);
 
     await createAuditLog(
       user.id,
       'UPDATE_TRIP_RATES',
-      `Обновлены нормы суточных: по РК = ${kzRate} ₸/сут, за рубеж = ${abroadRate} ₸/сут`
+      `Обновлены нормы суточных: 3 МРП = ${tier3MrpRate} ₸, спец. ставка = ${tierSeniorRate} ₸, остальные = ${standardRate} ₸`
     );
 
-    return NextResponse.json({ kzRate, abroadRate });
+    return NextResponse.json({ tier3MrpRate, tierSeniorRate, standardRate });
   } catch (error) {
     console.error('PATCH /api/trips/settings error:', error);
     return NextResponse.json({ error: 'Failed to update trip rates' }, { status: 500 });

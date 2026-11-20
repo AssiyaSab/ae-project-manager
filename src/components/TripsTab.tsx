@@ -7,21 +7,20 @@ import { useReactToPrint } from 'react-to-print';
 import PrintTripOrder from './PrintTripOrder';
 import PrintTripCertificate from './PrintTripCertificate';
 import {
-  DEFAULT_DAILY_ALLOWANCE_KZ,
-  DEFAULT_DAILY_ALLOWANCE_ABROAD,
+  DEFAULT_TRIP_RATES,
+  TripRates,
   calculateTripBudget,
-  TripType,
 } from '@/lib/tripRules';
 
 export default function TripsTab({ currentUser, projects, users }: any) {
   const [trips, setTrips] = useState<any[]>([]);
 
   // Нормы суточных компании
-  const [kzRate, setKzRate] = useState<number>(DEFAULT_DAILY_ALLOWANCE_KZ);
-  const [abroadRate, setAbroadRate] = useState<number>(DEFAULT_DAILY_ALLOWANCE_ABROAD);
+  const [rates, setRates] = useState<TripRates>(DEFAULT_TRIP_RATES);
   const [showRatesModal, setShowRatesModal] = useState(false);
-  const [editKzRate, setEditKzRate] = useState<string>(String(DEFAULT_DAILY_ALLOWANCE_KZ));
-  const [editAbroadRate, setEditAbroadRate] = useState<string>(String(DEFAULT_DAILY_ALLOWANCE_ABROAD));
+  const [editTier3MrpRate, setEditTier3MrpRate] = useState<string>(String(DEFAULT_TRIP_RATES.tier3MrpRate));
+  const [editTierSeniorRate, setEditTierSeniorRate] = useState<string>(String(DEFAULT_TRIP_RATES.tierSeniorRate));
+  const [editStandardRate, setEditStandardRate] = useState<string>(String(DEFAULT_TRIP_RATES.standardRate));
 
   // Поля создания командировки
   const [tripEmployee, setTripEmployee] = useState('');
@@ -29,7 +28,6 @@ export default function TripsTab({ currentUser, projects, users }: any) {
   const [tripPurpose, setTripPurpose] = useState('');
   const [tripStart, setTripStart] = useState('');
   const [tripEnd, setTripEnd] = useState('');
-  const [tripType, setTripType] = useState<TripType>('KZ');
   const [tripTransportCost, setTripTransportCost] = useState('');
   const [tripAccommodationCost, setTripAccommodationCost] = useState('');
   const [tripProject, setTripProject] = useState('');
@@ -92,14 +90,15 @@ export default function TripsTab({ currentUser, projects, users }: any) {
 
       if (settingsRes.ok) {
         const sData = await settingsRes.json();
-        if (sData.kzRate) {
-          setKzRate(Number(sData.kzRate));
-          setEditKzRate(String(sData.kzRate));
-        }
-        if (sData.abroadRate) {
-          setAbroadRate(Number(sData.abroadRate));
-          setEditAbroadRate(String(sData.abroadRate));
-        }
+        const nextRates: TripRates = {
+          tier3MrpRate: Number(sData.tier3MrpRate) || DEFAULT_TRIP_RATES.tier3MrpRate,
+          tierSeniorRate: Number(sData.tierSeniorRate) || DEFAULT_TRIP_RATES.tierSeniorRate,
+          standardRate: Number(sData.standardRate) || DEFAULT_TRIP_RATES.standardRate,
+        };
+        setRates(nextRates);
+        setEditTier3MrpRate(String(nextRates.tier3MrpRate));
+        setEditTierSeniorRate(String(nextRates.tierSeniorRate));
+        setEditStandardRate(String(nextRates.standardRate));
       }
     } catch (e) {
       console.error(e);
@@ -117,13 +116,14 @@ export default function TripsTab({ currentUser, projects, users }: any) {
   }, [currentUser]);
 
   // Автоматический расчет бюджета в реальном времени
+  const selectedEmployee =
+    users.find((u: any) => String(u.id) === String(tripEmployee)) || currentUser;
   const hasDates = Boolean(tripStart && tripEnd);
   const liveCalc = calculateTripBudget({
     startDate: tripStart || new Date(),
     endDate: tripEnd || tripStart || new Date(),
-    tripType,
-    kzRate,
-    abroadRate,
+    employeeName: selectedEmployee?.name,
+    rates,
     transportCost: tripTransportCost,
     accommodationCost: tripAccommodationCost,
   });
@@ -140,7 +140,6 @@ export default function TripsTab({ currentUser, projects, users }: any) {
           purpose: tripPurpose,
           startDate: tripStart,
           endDate: tripEnd,
-          tripType,
           transportCost: Number(tripTransportCost) || 0,
           accommodationCost: Number(tripAccommodationCost) || 0,
           projectId: tripProject || null,
@@ -172,8 +171,9 @@ export default function TripsTab({ currentUser, projects, users }: any) {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          kzRate: Number(editKzRate),
-          abroadRate: Number(editAbroadRate),
+          tier3MrpRate: Number(editTier3MrpRate),
+          tierSeniorRate: Number(editTierSeniorRate),
+          standardRate: Number(editStandardRate),
         }),
       });
       const data = await res.json();
@@ -181,8 +181,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
         alert(data.error || 'Ошибка сохранения норм суточных');
         return;
       }
-      setKzRate(data.kzRate);
-      setAbroadRate(data.abroadRate);
+      setRates(data);
       setShowRatesModal(false);
     } catch (e) {
       console.error(e);
@@ -217,7 +216,6 @@ export default function TripsTab({ currentUser, projects, users }: any) {
           purpose: editingTrip.purpose,
           startDate: editingTrip.startDate,
           endDate: editingTrip.endDate,
-          tripType: editingTrip.tripType || 'KZ',
           transportCost: Number(editingTrip.transportCost) || 0,
           accommodationCost: Number(editingTrip.accommodationCost) || 0,
           ...(isChiefAccountantOrAdmin && editingTrip.manualOverrideBudget !== undefined
@@ -270,7 +268,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
               className="inline-btn"
               style={{ fontSize: '0.8rem', padding: '6px 12px', background: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px' }}
             >
-              ⚙️ Нормы суточных ({kzRate.toLocaleString('ru-RU')} / {abroadRate.toLocaleString('ru-RU')} ₸)
+              ⚙️ Нормы суточных ({rates.tier3MrpRate.toLocaleString('ru-RU')} / {rates.tierSeniorRate.toLocaleString('ru-RU')} / {rates.standardRate.toLocaleString('ru-RU')} ₸)
             </button>
           )}
         </div>
@@ -327,46 +325,8 @@ export default function TripsTab({ currentUser, projects, users }: any) {
             </select>
           </div>
 
-          {/* Строка 2: Тип поездки, Даты, Авто-суточные (read-only), Проезд, Проживание */}
+          {/* Строка 2: Даты, Авто-суточные (read-only), Проезд, Проживание */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Тариф суточных</label>
-              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.04)', padding: '3px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <button
-                  type="button"
-                  onClick={() => setTripType('KZ')}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    background: tripType === 'KZ' ? '#0ea5e9' : 'transparent',
-                    color: tripType === 'KZ' ? '#fff' : 'var(--text-muted)',
-                  }}
-                >
-                  🇰🇿 По РК ({kzRate.toLocaleString('ru-RU')} ₸)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTripType('ABROAD')}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '0.78rem',
-                    fontWeight: 600,
-                    background: tripType === 'ABROAD' ? '#8b5cf6' : 'transparent',
-                    color: tripType === 'ABROAD' ? '#fff' : 'var(--text-muted)',
-                  }}
-                >
-                  🌍 За рубеж ({abroadRate.toLocaleString('ru-RU')} ₸)
-                </button>
-              </div>
-            </div>
-
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Даты с — по *</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -494,12 +454,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                 return (
                   <tr key={t.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                     <td style={{ padding: '10px', fontWeight: 600 }}>{t.employee?.name}</td>
-                    <td style={{ padding: '10px' }}>
-                      <div>{t.destination}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {t.tripType === 'ABROAD' ? '🌍 За рубеж' : '🇰🇿 По РК'}
-                      </div>
-                    </td>
+                    <td style={{ padding: '10px' }}>{t.destination}</td>
                     <td style={{ padding: '10px' }}>
                       <div>
                         {formatDate(t.startDate)} - {formatDate(t.endDate)}
@@ -624,20 +579,26 @@ export default function TripsTab({ currentUser, projects, users }: any) {
       {/* Модальное окно настройки ставок суточных (ADMIN / CHIEF_ACCOUNTANT) */}
       {showRatesModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="form-card" style={{ width: '400px', background: '#151b26' }}>
+          <div className="form-card" style={{ width: '440px', background: '#151b26' }}>
             <h3 style={{ marginTop: 0, marginBottom: '15px' }}>⚙️ Нормы суточных компании</h3>
             <form onSubmit={handleSaveRates} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  🇰🇿 Суточные по РК (₸ / сутки)
+                  3 МРП — Быкаев Канат, Быкаев Жанат, Канабеков Ерлик (₸ / сутки)
                 </label>
-                <input className="form-input" type="number" min="1" value={editKzRate} onChange={(e) => setEditKzRate(e.target.value)} required />
+                <input className="form-input" type="number" min="1" value={editTier3MrpRate} onChange={(e) => setEditTier3MrpRate(e.target.value)} required />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                  🌍 Суточные за рубеж (₸ / сутки)
+                  Спец. ставка — Ражапов Мырзабек, Ан Александр (₸ / сутки)
                 </label>
-                <input className="form-input" type="number" min="1" value={editAbroadRate} onChange={(e) => setEditAbroadRate(e.target.value)} required />
+                <input className="form-input" type="number" min="1" value={editTierSeniorRate} onChange={(e) => setEditTierSeniorRate(e.target.value)} required />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                  Остальные сотрудники (₸ / сутки)
+                </label>
+                <input className="form-input" type="number" min="1" value={editStandardRate} onChange={(e) => setEditStandardRate(e.target.value)} required />
               </div>
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button type="button" className="inline-btn" onClick={() => setShowRatesModal(false)}>

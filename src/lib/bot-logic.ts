@@ -1138,9 +1138,8 @@ export async function handleIncomingBotMessage(
       const calc = calculateTripBudget({
         startDate: start,
         endDate: end,
-        tripType: 'KZ',
-        kzRate: rates.kzRate,
-        abroadRate: rates.abroadRate,
+        employeeName: user.name,
+        rates,
       });
 
       data.startDate = start.toISOString();
@@ -1207,9 +1206,8 @@ export async function handleIncomingBotMessage(
       const calc = calculateTripBudget({
         startDate: start,
         endDate: end,
-        tripType: 'KZ',
-        kzRate: rates.kzRate,
-        abroadRate: rates.abroadRate,
+        employeeName: user.name,
+        rates,
         transportCost: extraTransport,
         accommodationCost: 0,
       });
