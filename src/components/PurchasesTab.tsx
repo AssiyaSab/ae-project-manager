@@ -1384,16 +1384,16 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         </button>
                       )}
 
-                      {/* 7. ADMIN CONTROLS */}
+                      {/* 7. ADMIN / MANAGER CONTROLS */}
+                      {isGipOrManager && (
+                        <button onClick={() => setEditingPurchase(p)} className="inline-btn" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }} title="Редактировать заявку">
+                          ✏️
+                        </button>
+                      )}
                       {role === 'ADMIN' && (
-                        <>
-                          <button onClick={() => setEditingPurchase(p)} className="inline-btn" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}>
-                            ✏️
-                          </button>
-                          <button onClick={() => handleDeletePurchase(p.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
-                            🗑️
-                          </button>
-                        </>
+                        <button onClick={() => handleDeletePurchase(p.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }} title="Удалить заявку">
+                          🗑️
+                        </button>
                       )}
 
                     </div>

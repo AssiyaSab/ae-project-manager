@@ -96,8 +96,8 @@ export async function POST(request: Request) {
     });
 
     try {
-      const admins = await prisma.user.findMany({
-        where: { role: 'ADMIN', telegramId: { not: null } }
+      const approvers = await prisma.user.findMany({
+        where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
       });
       const { sendTelegramMessage } = await import('@/lib/telegram');
       
@@ -121,9 +121,9 @@ export async function POST(request: Request) {
         ]
       };
 
-      for (const admin of admins) {
-        if (admin.telegramId) {
-          await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown', reply_markup: keyboard });
+      for (const approver of approvers) {
+        if (approver.telegramId) {
+          await sendTelegramMessage(approver.telegramId, message, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
       }
     } catch (tgError) {

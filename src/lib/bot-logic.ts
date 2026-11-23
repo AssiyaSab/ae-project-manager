@@ -25,6 +25,60 @@ export const defaultUserKeyboard = {
   is_persistent: true,
 };
 
+async function notifyAfterPurchaseCreated(
+  purchase: { id: number; status: string; title: string; amount: number; project?: { name: string } | null },
+  user: { name: string; role: string },
+  fileUrl?: string | null
+): Promise<string> {
+  if (purchase.status === 'IN_PROCUREMENT') {
+    await createOrUpdateSupplyTask(purchase.id);
+    const supplyUsers = await prisma.user.findMany({
+      where: { role: { in: ['SUPPLY', 'ADMIN'] }, telegramId: { not: null } }
+    });
+    const supplyMsg = `📦 *Заявка #${purchase.id} сразу передана в снабжение*\n\n` +
+      `• *Проект:* ${purchase.project?.name || 'Не указан'}\n` +
+      `• *Потребность:* ${purchase.title}\n` +
+      `• *Инициатор:* ${user.name} (${user.role})\n` +
+      (purchase.amount > 0 ? `• *Ориент. сумма:* ${purchase.amount.toLocaleString('ru-RU')} ₸\n` : '') +
+      (fileUrl ? `📎 [Открыть файл / спецификацию](${fileUrl})\n\n` : '\n') +
+      `👉 Запросите счет у поставщика и прикрепите его:`;
+    const supplyKeyboard = {
+      inline_keyboard: [[{ text: '📎 Прикрепить счет поставщика', callback_data: `attach_invoice_${purchase.id}` }]]
+    };
+    for (const sUser of supplyUsers) {
+      if (sUser.telegramId) {
+        await sendTelegramMessage(sUser.telegramId, supplyMsg, { parse_mode: 'Markdown', reply_markup: supplyKeyboard });
+      }
+    }
+    return `✅ Заявка сразу передана в Снабжение (без дополнительного согласования).`;
+  }
+
+  const admins = await prisma.user.findMany({
+    where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
+  });
+  const notifyMsg = `🛒 *Новая заявка на закупку ТМЦ #${purchase.id}*\n\n` +
+    `• *Проект:* ${purchase.project?.name || 'Не указан'}\n` +
+    `• *Инициатор:* ${user.name} (${user.role})\n` +
+    `• *ТМЦ:* ${purchase.title}\n` +
+    (purchase.amount > 0 ? `• *Ориент. сумма:* ${purchase.amount.toLocaleString('ru-RU')} ₸\n` : '') +
+    (fileUrl ? `📎 [Скан / Фото документа](${fileUrl})\n\n` : '\n') +
+    `👉 Выберите действие для согласования:`;
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: 'Одобрить ✅', callback_data: `pur_approve_need_${purchase.id}` },
+        { text: 'Отклонить ❌', callback_data: `pur_reject_${purchase.id}` }
+      ]
+    ]
+  };
+  for (const admin of admins) {
+    if (admin.telegramId) {
+      await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+  }
+  return `⏳ Заявка передана Директору/Руководителю на согласование потребности.`;
+}
+
 export const FSM_ACTIONS = [
   'PENDING_PIN_APPROVAL',
   'APPROVE_PURCHASE_PIN',
@@ -228,6 +282,9 @@ export async function handleIncomingBotMessage(
 
         if (project) {
           const reqType = (wizardData.amount > 0 && cleanText.toLowerCase().includes('чек')) ? 'EXPENSE' : 'INVOICE';
+          const initialStatus = reqType === 'EXPENSE'
+            ? 'PENDING_EXPENSE'
+            : (user.role === 'MANAGER' ? 'IN_PROCUREMENT' : 'PENDING_APPROVAL');
           const purchase = await prisma.purchaseRequest.create({
             data: {
               type: reqType,
@@ -236,40 +293,14 @@ export async function handleIncomingBotMessage(
               projectId: project.id,
               requesterId: user.id,
               fileUrl: fileUrl || null,
-              status: reqType === 'EXPENSE' ? 'PENDING_EXPENSE' : 'PENDING_APPROVAL',
+              status: initialStatus,
             },
             include: { project: true, requester: true }
           });
 
           await prisma.auditLog.delete({ where: { id: wizPhotoLog.id } }).catch(() => {});
 
-          // Notify Admins with Direct Approval Inline Buttons
-          const admins = await prisma.user.findMany({
-            where: { role: 'ADMIN', telegramId: { not: null } }
-          });
-
-          const notifyMsg = `🛒 *Новая заявка на закупку ТМЦ #${purchase.id}*\n\n` +
-            `• *Проект:* ${project.name}\n` +
-            `• *Инициатор:* ${user.name} (${user.role})\n` +
-            `• *ТМЦ:* ${purchase.title}\n` +
-            (purchase.amount > 0 ? `• *Ориент. сумма:* ${purchase.amount.toLocaleString('ru-RU')} ₸\n` : '') +
-            (fileUrl ? `📎 [Скан / Фото документа](${fileUrl})\n\n` : '\n') +
-            `👉 Выберите действие для согласования:`;
-
-          const keyboard = {
-            inline_keyboard: [
-              [
-                { text: 'Одобрить ✅', callback_data: `pur_approve_need_${purchase.id}` },
-                { text: 'Отклонить ❌', callback_data: `pur_reject_${purchase.id}` }
-              ]
-            ]
-          };
-
-          for (const admin of admins) {
-            if (admin.telegramId) {
-              await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
-            }
-          }
+          const statusNote = await notifyAfterPurchaseCreated(purchase, user, fileUrl);
 
           return {
             replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
@@ -277,7 +308,7 @@ export async function handleIncomingBotMessage(
               `• *ТМЦ:* ${purchase.title}\n` +
               (purchase.amount > 0 ? `• *Сумма:* ${purchase.amount.toLocaleString('ru-RU')} ₸\n` : '') +
               `• *Файл:* Прикреплен 📎\n\n` +
-              `⏳ Заявка передана Директору на согласование потребности.`,
+              statusNote,
             keyboard: defaultUserKeyboard,
           };
         }
@@ -453,7 +484,7 @@ export async function handleIncomingBotMessage(
             projectId: project.id,
             requesterId: user.id,
             fileUrl: fileUrl || null,
-            status: 'PENDING_APPROVAL',
+            status: user.role === 'MANAGER' ? 'IN_PROCUREMENT' : 'PENDING_APPROVAL',
             amount: 0
           },
           include: { project: true, requester: true }
@@ -461,35 +492,14 @@ export async function handleIncomingBotMessage(
 
         await prisma.auditLog.delete({ where: { id: pendingSpecLog.id } }).catch(() => {});
 
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN', telegramId: { not: null } }
-        });
-
-        const notifyMsg = `🛒 *Новая заявка на закупку #${purchase.id}*\n\n` +
-          `• *Проект:* ${project.name}\n` +
-          `• *Инициатор:* ${user.name} (${user.role})\n` +
-          `• *Описание:* ${reqTitle}\n` +
-          (fileUrl ? `📎 [Открыть спецификацию](${fileUrl})\n\n` : `\n`) +
-          `👉 Выберите действие для согласования:`;
-
-        const keyboard = {
-          inline_keyboard: [
-            [
-              { text: 'Одобрить ✅', callback_data: `pur_approve_need_${purchase.id}` },
-              { text: 'Отклонить ❌', callback_data: `pur_reject_${purchase.id}` }
-            ]
-          ]
-        };
-
-        for (const admin of admins) {
-          if (admin.telegramId) await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
-        }
+        const statusNote = await notifyAfterPurchaseCreated(purchase, user, fileUrl);
 
         return {
           replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
             `*Проект:* ${project.name}\n` +
+            `*Описание:* ${reqTitle}\n` +
             `*Файл:* ${fileContext.fileName || 'Спецификация'}\n\n` +
-            `⏳ Заявка передана Директору на первичное согласование потребности.`,
+            statusNote,
           keyboard: defaultUserKeyboard,
         };
       }
@@ -869,44 +879,21 @@ export async function handleIncomingBotMessage(
             amount: Number(data.amount) || 0,
             projectId: project.id,
             requesterId: user.id,
-            status: 'PENDING_APPROVAL',
+            status: user.role === 'MANAGER' ? 'IN_PROCUREMENT' : 'PENDING_APPROVAL',
           },
           include: { project: true, requester: true }
         });
 
         await prisma.auditLog.delete({ where: { id: wizPhotoLog.id } }).catch(() => {});
 
-        // Notify Admins
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN', telegramId: { not: null } }
-        });
-
-        const notifyMsg = `🛒 *Новая заявка на закупку ТМЦ #${purchase.id}*\n\n` +
-          `• *Проект:* ${project.name}\n` +
-          `• *Инициатор:* ${user.name} (${user.role})\n` +
-          `• *ТМЦ:* ${purchase.title}\n` +
-          (purchase.amount > 0 ? `• *Ориент. сумма:* ${purchase.amount.toLocaleString('ru-RU')} ₸\n\n` : '\n') +
-          `👉 Выберите действие для согласования:`;
-
-        const keyboard = {
-          inline_keyboard: [
-            [
-              { text: 'Одобрить ✅', callback_data: `pur_approve_need_${purchase.id}` },
-              { text: 'Отклонить ❌', callback_data: `pur_reject_${purchase.id}` }
-            ]
-          ]
-        };
-
-        for (const admin of admins) {
-          if (admin.telegramId) await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
-        }
+        const statusNote = await notifyAfterPurchaseCreated(purchase, user, null);
 
         return {
           replyText: `🎉 *Заявка на закупку #${purchase.id} успешно создана!*\n\n` +
             `• *Проект:* ${project.name}\n` +
             `• *ТМЦ:* ${purchase.title}\n` +
             (purchase.amount > 0 ? `• *Сумма:* ${purchase.amount.toLocaleString('ru-RU')} ₸\n\n` : '\n') +
-            `⏳ Заявка передана Директору на согласование потребности.`,
+            statusNote,
           keyboard: defaultUserKeyboard,
         };
       }
@@ -1235,9 +1222,9 @@ export async function handleIncomingBotMessage(
 
       await prisma.auditLog.delete({ where: { id: tripBudgetLog.id } }).catch(() => {});
 
-      // Notify Admins with Direct Approval Inline Buttons
-      const admins = await prisma.user.findMany({
-        where: { role: 'ADMIN', telegramId: { not: null } }
+      // Notify Admins & Managers with Direct Approval Inline Buttons
+      const approvers = await prisma.user.findMany({
+        where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
       });
 
       const notifyMsg = `✈️ *Новая заявка на командировку #${trip.id}*\n\n` +
@@ -1259,9 +1246,9 @@ export async function handleIncomingBotMessage(
         ]
       };
 
-      for (const admin of admins) {
-        if (admin.telegramId) {
-          await sendTelegramMessage(admin.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
+      for (const approver of approvers) {
+        if (approver.telegramId) {
+          await sendTelegramMessage(approver.telegramId, notifyMsg, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
       }
 
@@ -1272,7 +1259,7 @@ export async function handleIncomingBotMessage(
           `• *Суточные:* ${calc.dailyAllowanceTotal.toLocaleString('ru-RU')} ₸\n` +
           (calc.transportCost > 0 ? `• *Билеты / проживание:* ${calc.transportCost.toLocaleString('ru-RU')} ₸\n` : '') +
           `• *Итого к выдаче:* *${calc.totalBudget.toLocaleString('ru-RU')} ₸*\n\n` +
-          `⏳ Заявка направлена Директору на согласование.`,
+          `⏳ Заявка направлена Директору/Руководителю на согласование.`,
         keyboard: defaultUserKeyboard,
       };
     } catch (e) {

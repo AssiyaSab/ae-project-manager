@@ -57,8 +57,14 @@ export async function POST(request: Request) {
     const requestDiscipline = ['KIP', 'ELECTRO', 'GENERAL'].includes(discipline) ? discipline : 'GENERAL';
     const numAmount = amount ? Number(amount) : 0;
     
-    // Начальный статус
-    const initialStatus = requestType === 'EXPENSE' ? 'PENDING_EXPENSE' : 'PENDING_APPROVAL';
+    // Начальный статус: заявки на ТМЦ от Руководителя (MANAGER) сразу уходят в снабжение
+    const isDirectToSupply = requestType === 'INVOICE' && user.role === 'MANAGER';
+    const initialStatus =
+      requestType === 'EXPENSE'
+        ? 'PENDING_EXPENSE'
+        : isDirectToSupply
+          ? 'IN_PROCUREMENT'
+          : 'PENDING_APPROVAL';
 
     // Привязка автора заявки к текущему верифицированному пользователю из сессии
     let finalRequesterId: number | null =
@@ -98,41 +104,68 @@ export async function POST(request: Request) {
 
     // Telegram уведомление
     try {
-      const admins = await prisma.user.findMany({
-        where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
-      });
-      
-      const typeLabel = requestType === 'EXPENSE' ? '🧾 Срочный подотчет / чек' : '🏢 Заявка на закупку (Счет на ТОО)';
-      const disciplineLabel = requestDiscipline === 'KIP' ? '🎛️ КИПиА' : requestDiscipline === 'ELECTRO' ? '⚡ Электрика' : '📦 Общее';
-      let itemsListStr = '';
-      if (purchase.items && purchase.items.length > 0) {
-        itemsListStr = `*Позиции (${purchase.items.length}):*\n` +
-          purchase.items.slice(0, 5).map((it, idx) => `• ${it.name} — ${it.quantity} ${it.unit}`).join('\n') +
-          (purchase.items.length > 5 ? `\n_...и еще ${purchase.items.length - 5} поз._\n\n` : '\n\n');
-      }
+      if (isDirectToSupply) {
+        await createOrUpdateSupplyTask(purchase.id);
 
-      const message = `🛒 *Новая заявка в снабжение*\n\n` +
-        `*Тип:* ${typeLabel}\n` +
-        `*Направление:* ${disciplineLabel}\n` +
-        `*Наименование:* ${purchase.title}\n` +
-        (numAmount > 0 ? `*Ориентировочная сумма:* ${numAmount.toLocaleString('ru-RU')} ₸\n` : '') +
-        `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
-        `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Сотрудник'}\n\n` +
-        itemsListStr +
-        `⏳ Требуется первичное согласование потребности Директором/Руководителем.`;
+        const supplyUsers = await prisma.user.findMany({
+          where: { role: { in: ['SUPPLY', 'ADMIN'] }, telegramId: { not: null } }
+        });
+        const msg = `📦 *Заявка #${purchase.id} сразу передана в снабжение*\n\n` +
+          `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
+          `*Потребность:* ${purchase.title}\n` +
+          `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Руководитель'}\n\n` +
+          `👉 Запросите счет у поставщика и прикрепите его:`;
 
-      const initialKeyboard = {
-        inline_keyboard: [
-          [
-            { text: '✅ Разрешить в снабжение', callback_data: `pur_approve_need_${purchase.id}` },
-            { text: '❌ Отклонить', callback_data: `pur_reject_${purchase.id}` }
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '📎 Прикрепить счет поставщика', callback_data: `attach_invoice_${purchase.id}` }
+            ]
           ]
-        ]
-      };
+        };
 
-      for (const admin of admins) {
-        if (admin.telegramId) {
-          await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown', reply_markup: initialKeyboard });
+        for (const sUser of supplyUsers) {
+          if (sUser.telegramId) {
+            await sendTelegramMessage(sUser.telegramId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+          }
+        }
+      } else {
+        const admins = await prisma.user.findMany({
+          where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
+        });
+        
+        const typeLabel = requestType === 'EXPENSE' ? '🧾 Срочный подотчет / чек' : '🏢 Заявка на закупку (Счет на ТОО)';
+        const disciplineLabel = requestDiscipline === 'KIP' ? '🎛️ КИПиА' : requestDiscipline === 'ELECTRO' ? '⚡ Электрика' : '📦 Общее';
+        let itemsListStr = '';
+        if (purchase.items && purchase.items.length > 0) {
+          itemsListStr = `*Позиции (${purchase.items.length}):*\n` +
+            purchase.items.slice(0, 5).map((it, idx) => `• ${it.name} — ${it.quantity} ${it.unit}`).join('\n') +
+            (purchase.items.length > 5 ? `\n_...и еще ${purchase.items.length - 5} поз._\n\n` : '\n\n');
+        }
+
+        const message = `🛒 *Новая заявка в снабжение*\n\n` +
+          `*Тип:* ${typeLabel}\n` +
+          `*Направление:* ${disciplineLabel}\n` +
+          `*Наименование:* ${purchase.title}\n` +
+          (numAmount > 0 ? `*Ориентировочная сумма:* ${numAmount.toLocaleString('ru-RU')} ₸\n` : '') +
+          `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
+          `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Сотрудник'}\n\n` +
+          itemsListStr +
+          `⏳ Требуется первичное согласование потребности Директором/Руководителем.`;
+
+        const initialKeyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Разрешить в снабжение', callback_data: `pur_approve_need_${purchase.id}` },
+              { text: '❌ Отклонить', callback_data: `pur_reject_${purchase.id}` }
+            ]
+          ]
+        };
+
+        for (const admin of admins) {
+          if (admin.telegramId) {
+            await sendTelegramMessage(admin.telegramId, message, { parse_mode: 'Markdown', reply_markup: initialKeyboard });
+          }
         }
       }
     } catch (tgError) {
