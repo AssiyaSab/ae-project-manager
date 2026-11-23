@@ -59,6 +59,13 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   // Edit State
   const [editingPurchase, setEditingPurchase] = useState<any>(null);
 
+  // POA (Доверенность Д-1) Modal State
+  const [poaModalPurchase, setPoaModalPurchase] = useState<any>(null);
+  const [poaNumber, setPoaNumber] = useState('');
+  const [poaDate, setPoaDate] = useState('');
+  const [poaIssuedTo, setPoaIssuedTo] = useState('');
+  const [poaFileUrl, setPoaFileUrl] = useState('');
+
   // Print Ref
   const purchasePrintRef = useRef(null);
   const [activePurchaseForPrint, setActivePurchaseForPrint] = useState<any>(null);
@@ -435,6 +442,47 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
       fetchData();
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const openPoaModal = (p: any) => {
+    setPoaModalPurchase(p);
+    setPoaNumber(p.poaNumber || '');
+    setPoaDate(p.poaDate ? new Date(p.poaDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+    setPoaIssuedTo(p.poaIssuedTo || p.supplyUser?.name || '');
+    setPoaFileUrl(p.poaFileUrl || '');
+  };
+
+  const handlePoaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!poaModalPurchase) return;
+    try {
+      const res = await fetch('/api/purchases', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': pass || '',
+          'x-auth-password': pass || '',
+          'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+        },
+        body: JSON.stringify({
+          id: poaModalPurchase.id,
+          status: 'POA_ISSUED',
+          poaNumber: poaNumber.trim(),
+          poaDate: poaDate || null,
+          poaIssuedTo: poaIssuedTo.trim(),
+          poaFileUrl: poaFileUrl.trim() || null,
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Не удалось сохранить доверенность');
+        return;
+      }
+      setPoaModalPurchase(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -1322,6 +1370,28 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         ) : null
                       )}
 
+                      {/* 4.5 ACCOUNTANT: ISSUE POA (ДОВЕРЕННОСТЬ Д-1) */}
+                      {(p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && isAccountant && (
+                        <button
+                          onClick={() => openPoaModal(p)}
+                          className="inline-btn"
+                          style={{ background: '#8b5cf6', color: '#fff', fontWeight: 600 }}
+                          title="Оформить доверенность формы Д-1 для получения ТМЦ"
+                        >
+                          📜 Внести доверенность
+                        </button>
+                      )}
+                      {p.status === 'POA_ISSUED' && isAccountant && (
+                        <button
+                          onClick={() => openPoaModal(p)}
+                          className="inline-btn"
+                          style={{ background: 'rgba(139, 92, 246, 0.18)', color: '#c4b5fd', fontSize: '0.75rem' }}
+                          title="Редактировать данные доверенности Д-1"
+                        >
+                          📜 Ред. Д-1
+                        </button>
+                      )}
+
                       {/* 5. EXPENSE APPROVAL & PAYMENT */}
                       {p.status === 'PENDING_EXPENSE' && isGipOrManager && (
                         <>
@@ -1617,6 +1687,63 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
               <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                 <button type="button" className="inline-btn" onClick={() => setEditingPurchase(null)}>Отмена</button>
                 <button type="submit" className="btn-submit">Сохранить</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* POA (ДОВЕРЕННОСТЬ Д-1) MODAL */}
+      {poaModalPurchase && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="form-card" style={{ width: '440px', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '6px' }}>📜 Доверенность Д-1 (Заявка #{poaModalPurchase.id})</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '16px' }}>
+              {poaModalPurchase.title} {poaModalPurchase.supplierName ? `— ${poaModalPurchase.supplierName}` : ''}
+            </p>
+            <form onSubmit={handlePoaSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Номер доверенности Д-1 *</label>
+                <input
+                  className="form-input"
+                  placeholder="Например: 145"
+                  value={poaNumber}
+                  onChange={e => setPoaNumber(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Дата выдачи *</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={poaDate}
+                  onChange={e => setPoaDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>На кого выдана (ФИО снабженца / экспедитора) *</label>
+                <input
+                  className="form-input"
+                  placeholder="ФИО получателя ТМЦ"
+                  value={poaIssuedTo}
+                  onChange={e => setPoaIssuedTo(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Ссылка на скан доверенности (опционально)</label>
+                <input
+                  className="form-input"
+                  placeholder="https://..."
+                  value={poaFileUrl}
+                  onChange={e => setPoaFileUrl(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" className="inline-btn" onClick={() => setPoaModalPurchase(null)}>Отмена</button>
+                <button type="submit" className="btn-submit" style={{ background: '#8b5cf6' }}>📜 Выдать доверенность</button>
               </div>
             </form>
           </div>
