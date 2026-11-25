@@ -6,7 +6,7 @@ import { formatDate } from '@/lib/formatters';
 import { useReactToPrint } from 'react-to-print';
 import PrintPurchaseRequest from './PrintPurchaseRequest';
 import { useToast } from './ToastProvider';
-import { fileToCompressedDataUrl, compressImageIfNeeded } from '@/lib/imageCompression';
+import { uploadFileCompressed, compressImageIfNeeded } from '@/lib/imageCompression';
 import FilePreviewModal, { formatTelegramOrFileUrl } from './FilePreviewModal';
 
 export default function PurchasesTab({ currentUser, projects, users, highlightPurchaseId }: any) {
@@ -366,17 +366,20 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     if (supplyFileInputRef.current) supplyFileInputRef.current.value = '';
   };
 
+  const getAuthHeaders = () => ({
+    'x-admin-password': pass || '',
+    'x-auth-password': pass || '',
+    'x-auth-login': localStorage.getItem('ae_auth_login') || currentUser?.login || ''
+  });
+
   const handleSupplyFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const rawFile = e.target.files[0];
       const file = await compressImageIfNeeded(rawFile);
       setSupplyInvoiceFile(file);
-      if (file.size <= 3.5 * 1024 * 1024) {
-        const dataUrl = await fileToCompressedDataUrl(file);
-        setSupplyInvoiceFileUrl(dataUrl);
-      } else {
-        showToast('Файл больше 3.5 МБ: лучше вставить ссылку на Google Диск', 'info');
-      }
+      const uploadedUrl = await uploadFileCompressed(file, 'invoices', getAuthHeaders());
+      setSupplyInvoiceFileUrl(uploadedUrl);
+      showToast('📎 Счет загружен в облако', 'info');
     }
   };
 
@@ -1193,9 +1196,9 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         onChange={async (e) => {
                           const f = e.target.files?.[0];
                           if (!f) return;
-                          const url = await fileToCompressedDataUrl(f);
+                          const url = await uploadFileCompressed(f, 'invoices', getAuthHeaders());
                           setDirectInvoiceFileUrl(url);
-                          showToast('📎 Счет прикреплен и сжат', 'info');
+                          showToast('📎 Счет сжат и загружен в облако', 'info');
                         }}
                       />
                     </div>
@@ -2229,9 +2232,9 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       onChange={async (e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        const url = await fileToCompressedDataUrl(f);
+                        const url = await uploadFileCompressed(f, 'poa', getAuthHeaders());
                         setPoaFileUrl(url);
-                        showToast('📎 Скан доверенности сжат и прикреплен', 'info');
+                        showToast('📎 Скан доверенности сжат и загружен', 'info');
                       }}
                     />
                   </div>
@@ -2273,9 +2276,9 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                     onChange={async (e) => {
                       const f = e.target.files?.[0];
                       if (!f) return;
-                      const url = await fileToCompressedDataUrl(f);
+                      const url = await uploadFileCompressed(f, 'invoices', getAuthHeaders());
                       setMultiInvFileUrl(url);
-                      showToast('📎 Файл счета сжат и прикреплен', 'info');
+                      showToast('📎 Файл счета сжат и загружен', 'info');
                     }}
                   />
                 </div>
@@ -2335,9 +2338,9 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                   onChange={async (e) => {
                     const f = e.target.files?.[0];
                     if (!f) return;
-                    const url = await fileToCompressedDataUrl(f);
+                    const url = await uploadFileCompressed(f, 'waybills', getAuthHeaders());
                     setDeliveryNoteUrl(url);
-                    showToast('📎 Накладная сжата и готова к отправке', 'info');
+                    showToast('📎 Накладная сжата и загружена в облако', 'info');
                   }}
                 />
               </div>
