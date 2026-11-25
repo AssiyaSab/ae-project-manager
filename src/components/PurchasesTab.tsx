@@ -1046,7 +1046,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                 cursor: isSubmitting ? 'not-allowed' : 'pointer'
               }}
             >
-              {isSubmitting ? '⏳ Сохранение...' : (purchaseType === 'INVOICE' ? '🚀 В снабжение' : '💰 На подотчет')}
+              {isSubmitting ? '⏳ Сохранение...' : (purchaseType === 'INVOICE' ? '🚀 В работу' : '💰 На подотчет')}
             </button>
           </div>
 
