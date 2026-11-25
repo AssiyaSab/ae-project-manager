@@ -11,9 +11,13 @@ import {
   TripRates,
   calculateTripBudget,
 } from '@/lib/tripRules';
+import { useToast } from './ToastProvider';
 
 export default function TripsTab({ currentUser, projects, users }: any) {
+  const { showToast } = useToast();
   const [trips, setTrips] = useState<any[]>([]);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [confirmedKey, setConfirmedKey] = useState<string | null>(null);
 
   // Нормы суточных компании
   const [rates, setRates] = useState<TripRates>(DEFAULT_TRIP_RATES);
@@ -75,7 +79,8 @@ export default function TripsTab({ currentUser, projects, users }: any) {
     currentUser?.role === 'CHIEF_ACCOUNTANT' ||
     (currentUser?.role === 'ACCOUNTANT' && currentUser?.title?.toLowerCase().includes('главн'));
 
-  const canManageTrips = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT'].includes(currentUser?.role);
+  const isAccountingOrAdmin = ['ADMIN', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(currentUser?.role);
+  const canManageTrips = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT'].includes(currentUser?.role);
 
   const fetchData = async () => {
     if (!pass && currentUser?.role !== 'ENGINEER' && currentUser?.role !== 'ASSEMBLER') return;
@@ -188,17 +193,31 @@ export default function TripsTab({ currentUser, projects, users }: any) {
     }
   };
 
-  const updateTripStatus = async (id: number, status: string) => {
+  const updateTripStatus = async (id: number, status: string, actionKey?: string) => {
     if (!['ADMIN', 'MANAGER', 'ACCOUNTANT', 'CHIEF_ACCOUNTANT'].includes(currentUser?.role)) return;
+    const key = actionKey || `trip_${id}_${status}`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
     try {
-      await fetch('/api/trips', {
+      const res = await fetch('/api/trips', {
         method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify({ id, status }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Ошибка обновления статуса командировки', 'error');
+        return;
+      }
+      setConfirmedKey(key);
+      showToast('✅ Статус командировки обновлен', 'success');
+      setTimeout(() => setConfirmedKey((prev) => (prev === key ? null : prev)), 1800);
       fetchData();
     } catch (e) {
       console.error(e);
+      showToast('Ошибка сети при обновлении командировки', 'error');
+    } finally {
+      setLoadingKey(null);
     }
   };
 
@@ -218,7 +237,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
           endDate: editingTrip.endDate,
           transportCost: Number(editingTrip.transportCost) || 0,
           accommodationCost: Number(editingTrip.accommodationCost) || 0,
-          ...(isChiefAccountantOrAdmin && editingTrip.manualOverrideBudget !== undefined
+          ...(isAccountingOrAdmin && editingTrip.manualOverrideBudget !== undefined
             ? { totalBudget: Number(editingTrip.manualOverrideBudget) }
             : {}),
           projectId: editingTrip.projectId || null,
@@ -469,38 +488,25 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                       <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>{breakdown}</div>
                     </td>
                     <td style={{ padding: '10px' }}>
-                      <span
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold',
-                          background:
-                            t.status === 'PENDING'
-                              ? 'rgba(245, 158, 11, 0.2)'
-                              : t.status === 'APPROVED'
-                              ? 'rgba(16, 185, 129, 0.2)'
-                              : t.status === 'COMPLETED'
-                              ? 'rgba(59, 130, 246, 0.2)'
-                              : 'rgba(239, 68, 68, 0.2)',
-                          color:
-                            t.status === 'PENDING'
-                              ? '#f59e0b'
-                              : t.status === 'APPROVED'
-                              ? '#10b981'
-                              : t.status === 'COMPLETED'
-                              ? '#3b82f6'
-                              : '#ef4444',
-                        }}
-                      >
-                        {t.status === 'PENDING'
-                          ? 'НА РАССМОТРЕНИИ'
-                          : t.status === 'APPROVED'
-                          ? 'ОДОБРЕНО'
-                          : t.status === 'COMPLETED'
-                          ? 'ЗАВЕРШЕНО'
-                          : 'ОТКЛОНЕНО'}
-                      </span>
+                      {(() => {
+                        const badgeMap: Record<string, { label: string; bg: string; color: string }> = {
+                          PENDING_BUDGET: { label: '1. ПРОВЕРКА БЮДЖЕТА', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
+                          PENDING: { label: '1. ПРОВЕРКА БЮДЖЕТА', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
+                          PENDING_APPROVAL: { label: '2. ЖДЕТ ДИРЕКТОРА', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' },
+                          APPROVED_FOR_PAYMENT: { label: '3. К ОПЛАТЕ', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
+                          APPROVED: { label: '3. К ОПЛАТЕ', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
+                          PAID: { label: '4. ОПЛАЧЕНО', bg: 'rgba(16, 185, 129, 0.2)', color: '#10b981' },
+                          DOCS_SUBMITTED: { label: '5. ДОКУМЕНТЫ СДАНЫ', bg: 'rgba(20, 184, 166, 0.2)', color: '#2dd4bf' },
+                          COMPLETED: { label: '5. ДОКУМЕНТЫ СДАНЫ', bg: 'rgba(20, 184, 166, 0.2)', color: '#2dd4bf' },
+                          REJECTED: { label: 'ОТКЛОНЕНО', bg: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' },
+                        };
+                        const info = badgeMap[t.status] || { label: t.status, bg: 'rgba(255,255,255,0.1)', color: '#fff' };
+                        return (
+                          <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '0.73rem', fontWeight: 'bold', background: info.bg, color: info.color, whiteSpace: 'nowrap' }}>
+                            {info.label}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: '10px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
@@ -511,7 +517,7 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                         >
                           📄 Приказ (PDF)
                         </button>
-                        {(t.status === 'APPROVED' || t.status === 'COMPLETED') && (
+                        {['APPROVED_FOR_PAYMENT', 'APPROVED', 'PAID', 'DOCS_SUBMITTED', 'COMPLETED'].includes(t.status) && (
                           <button
                             onClick={() => generateTripCertificatePDF(t)}
                             className="inline-btn"
@@ -524,22 +530,83 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                     </td>
                     {canManageTrips && (
                       <td style={{ padding: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                        {t.status === 'PENDING' && ['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
-                          <>
-                            <button onClick={() => updateTripStatus(t.id, 'APPROVED')} className="inline-btn" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
-                              ✅
+                        {(t.status === 'PENDING_BUDGET' || t.status === 'PENDING') && isAccountingOrAdmin && (() => {
+                          const k = `trip_${t.id}_PENDING_APPROVAL`;
+                          const isL = loadingKey === k;
+                          const isC = confirmedKey === k;
+                          return (
+                            <button
+                              disabled={isL}
+                              onClick={() => updateTripStatus(t.id, 'PENDING_APPROVAL', k)}
+                              className="inline-btn"
+                              style={{ background: isC ? '#10b981' : '#8b5cf6', color: '#fff', opacity: isL ? 0.7 : 1 }}
+                            >
+                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '📤 Передать Директору'}
                             </button>
-                            <button onClick={() => updateTripStatus(t.id, 'REJECTED')} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
-                              ❌
+                          );
+                        })()}
+
+                        {(t.status === 'PENDING_APPROVAL' || t.status === 'PENDING' || t.status === 'PENDING_BUDGET') && ['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
+                          <>
+                            {(() => {
+                              const k = `trip_${t.id}_APPROVED_FOR_PAYMENT`;
+                              const isL = loadingKey === k;
+                              const isC = confirmedKey === k;
+                              return (
+                                <button
+                                  disabled={isL}
+                                  onClick={() => updateTripStatus(t.id, 'APPROVED_FOR_PAYMENT', k)}
+                                  className="inline-btn"
+                                  style={{ background: isC ? '#10b981' : 'rgba(16, 185, 129, 0.15)', color: isC ? '#fff' : '#10b981' }}
+                                >
+                                  {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ Одобрить'}
+                                </button>
+                              );
+                            })()}
+                            <button
+                              disabled={loadingKey === `trip_${t.id}_REJECTED`}
+                              onClick={() => updateTripStatus(t.id, 'REJECTED', `trip_${t.id}_REJECTED`)}
+                              className="inline-btn"
+                              style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}
+                            >
+                              {loadingKey === `trip_${t.id}_REJECTED` ? '⏳...' : '❌'}
                             </button>
                           </>
                         )}
-                        {t.status === 'APPROVED' && ['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
-                          <button onClick={() => updateTripStatus(t.id, 'COMPLETED')} className="inline-btn" style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' }}>
-                            Завершить
-                          </button>
-                        )}
-                        {isChiefAccountantOrAdmin && (
+
+                        {(t.status === 'APPROVED_FOR_PAYMENT' || t.status === 'APPROVED') && isAccountingOrAdmin && (() => {
+                          const k = `trip_${t.id}_PAID`;
+                          const isL = loadingKey === k;
+                          const isC = confirmedKey === k;
+                          return (
+                            <button
+                              disabled={isL}
+                              onClick={() => updateTripStatus(t.id, 'PAID', k)}
+                              className="inline-btn"
+                              style={{ background: '#10b981', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
+                            >
+                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '💳 Подтвердить оплату'}
+                            </button>
+                          );
+                        })()}
+
+                        {t.status === 'PAID' && isAccountingOrAdmin && (() => {
+                          const k = `trip_${t.id}_DOCS_SUBMITTED`;
+                          const isL = loadingKey === k;
+                          const isC = confirmedKey === k;
+                          return (
+                            <button
+                              disabled={isL}
+                              onClick={() => updateTripStatus(t.id, 'DOCS_SUBMITTED', k)}
+                              className="inline-btn"
+                              style={{ background: isC ? '#10b981' : '#0ea5e9', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
+                            >
+                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '📄 Документы сданы'}
+                            </button>
+                          );
+                        })()}
+
+                        {isAccountingOrAdmin && (
                           <button
                             onClick={() =>
                               setEditingTrip({
@@ -674,9 +741,9 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                 </div>
               </div>
 
-              {isChiefAccountantOrAdmin && (
+              {isAccountingOrAdmin && (
                 <div>
-                  <label style={{ fontSize: '0.75rem', color: '#fbbf24' }}>Итоговая сумма (корректировка Главбухом/Директором, ₸)</label>
+                  <label style={{ fontSize: '0.75rem', color: '#fbbf24' }}>Итоговая сумма (корректировка Бухгалтерии/Директора, ₸)</label>
                   <input
                     className="form-input"
                     type="number"

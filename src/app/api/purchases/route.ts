@@ -23,7 +23,12 @@ export async function GET(request: Request) {
         supplyUser: true,
         receivedByUser: true,
         items: {
+          include: { invoice: true },
           orderBy: { id: 'asc' }
+        },
+        invoices: {
+          include: { items: true },
+          orderBy: { createdAt: 'asc' }
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -42,7 +47,7 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    let { type, discipline, title, amount, projectId, fileUrl, requesterId, items } = body;
+    let { type, discipline, title, amount, projectId, fileUrl, requesterId, items, invoiceFileUrl, supplierName, invoiceNumber, directToDirector } = body;
     
     const isManagement = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT', 'SUPPLY'].includes(user.role);
     if (!isManagement) {
@@ -57,14 +62,23 @@ export async function POST(request: Request) {
     const requestDiscipline = ['KIP', 'ELECTRO', 'GENERAL'].includes(discipline) ? discipline : 'GENERAL';
     const numAmount = amount ? Number(amount) : 0;
     
-    // Начальный статус: заявки на ТМЦ от Руководителя (MANAGER) сразу уходят в снабжение
-    const isDirectToSupply = requestType === 'INVOICE' && user.role === 'MANAGER';
+    // Начальный статус:
+    // 1) Руководитель прикрепил счет сразу -> PENDING_PAYMENT_APPROVAL (напрямую Директору)
+    // 2) Руководитель без счета -> IN_PROCUREMENT (сразу в снабжение)
+    // 3) Остальные -> PENDING_APPROVAL (или PENDING_EXPENSE)
+    const isDirectInvoiceToDirector =
+      requestType === 'INVOICE' &&
+      user.role === 'MANAGER' &&
+      Boolean(directToDirector || invoiceFileUrl);
+    const isDirectToSupply = requestType === 'INVOICE' && user.role === 'MANAGER' && !isDirectInvoiceToDirector;
     const initialStatus =
       requestType === 'EXPENSE'
         ? 'PENDING_EXPENSE'
-        : isDirectToSupply
-          ? 'IN_PROCUREMENT'
-          : 'PENDING_APPROVAL';
+        : isDirectInvoiceToDirector
+          ? 'PENDING_PAYMENT_APPROVAL'
+          : isDirectToSupply
+            ? 'IN_PROCUREMENT'
+            : 'PENDING_APPROVAL';
 
     // Привязка автора заявки к текущему верифицированному пользователю из сессии
     let finalRequesterId: number | null =
@@ -87,6 +101,9 @@ export async function POST(request: Request) {
         amount: numAmount,
         projectId: Number(projectId),
         fileUrl: fileUrl || null,
+        invoiceFileUrl: invoiceFileUrl || null,
+        supplierName: supplierName || null,
+        invoiceNumber: invoiceNumber || null,
         status: initialStatus,
         requesterId: finalRequesterId,
         items: Array.isArray(items) && items.length > 0 ? {
@@ -99,12 +116,31 @@ export async function POST(request: Request) {
           }))
         } : undefined
       },
-      include: { project: true, requester: true, supplyUser: true, items: true }
+      include: { project: true, requester: true, supplyUser: true, items: { include: { invoice: true } }, invoices: { include: { items: true } } }
     });
 
     // Telegram уведомление
     try {
-      if (isDirectToSupply) {
+      if (isDirectInvoiceToDirector) {
+        const directors = await prisma.user.findMany({
+          where: { role: 'ADMIN', telegramId: { not: null } }
+        });
+        const msg = `📑 *Счет от Руководителя сразу на утверждение #${purchase.id}*\n\n` +
+          `*Проект:* ${purchase.project?.name || 'Не указан'}\n` +
+          `*ТМЦ:* ${purchase.title}\n` +
+          (numAmount > 0 ? `*Сумма:* ${numAmount.toLocaleString('ru-RU')} ₸\n` : '') +
+          `*Инициатор:* ${purchase.requester?.name || (user as any).name || 'Руководитель'}\n\n` +
+          `👉 Подтвердите оплату счета для передачи в бухгалтерию:`;
+        const keyboard = {
+          inline_keyboard: [[
+            { text: '💳 Утвердить счет к оплате', callback_data: `pur_approve_inv_${purchase.id}` },
+            { text: '❌ Отклонить', callback_data: `pur_reject_${purchase.id}` }
+          ]]
+        };
+        for (const d of directors) {
+          if (d.telegramId) await sendTelegramMessage(d.telegramId, msg, { parse_mode: 'Markdown', reply_markup: keyboard });
+        }
+      } else if (isDirectToSupply) {
         await createOrUpdateSupplyTask(purchase.id);
 
         const supplyUsers = await prisma.user.findMany({
@@ -207,11 +243,31 @@ export async function PATCH(request: Request) {
       poaDate,
       poaFileUrl,
       poaIssuedTo,
+      poaIsEdo,
+      deliveryNoteUrl,
+      action,
+      itemId,
       items
     } = body;
     
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    if (action === 'MARK_ITEM_FROM_STOCK' && itemId) {
+      if (!['SUPPLY', 'WAREHOUSE', 'ADMIN', 'MANAGER'].includes(user.role)) {
+        return NextResponse.json({ error: 'Недостаточно прав для списания со склада' }, { status: 403 });
+      }
+      const updatedItem = await prisma.purchaseItem.update({
+        where: { id: Number(itemId) },
+        data: {
+          sourceType: 'FROM_STOCK',
+          invoiceId: null,
+          isPaid: false,
+        },
+      });
+      await createAuditLog(user.id || null, 'PURCHASE_ITEM_STOCK', `Позиция #${itemId} заявки #${id} закрыта со склада`);
+      return NextResponse.json(updatedItem);
     }
 
     const currentPurchase = await prisma.purchaseRequest.findUnique({
@@ -260,6 +316,8 @@ export async function PATCH(request: Request) {
     if (poaDate !== undefined) data.poaDate = poaDate ? new Date(poaDate) : null;
     if (poaFileUrl !== undefined) data.poaFileUrl = poaFileUrl;
     if (poaIssuedTo !== undefined) data.poaIssuedTo = poaIssuedTo;
+    if (poaIsEdo !== undefined) data.poaIsEdo = Boolean(poaIsEdo);
+    if (deliveryNoteUrl !== undefined) data.deliveryNoteUrl = deliveryNoteUrl;
 
     // Автоматическая фиксация ответственных при смене статусов
     if (status === 'IN_PROCUREMENT') {
@@ -298,7 +356,14 @@ export async function PATCH(request: Request) {
     const updated = await prisma.purchaseRequest.update({
       where: { id: Number(id) },
       data,
-      include: { project: true, requester: true, supplyUser: true, receivedByUser: true, items: { orderBy: { id: 'asc' } } }
+      include: {
+        project: true,
+        requester: true,
+        supplyUser: true,
+        receivedByUser: true,
+        items: { include: { invoice: true }, orderBy: { id: 'asc' } },
+        invoices: { include: { items: true }, orderBy: { createdAt: 'asc' } }
+      }
     });
 
     // Telegram-уведомления по цепочке жизненного цикла
@@ -543,14 +608,27 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const user = await validateAuth(request);
-  if (!user || user.role !== 'ADMIN') {
-    return NextResponse.json({ error: 'Unauthorized: Admin only' }, { status: 401 });
+  if (!user || !['ADMIN', 'MANAGER'].includes(user.role)) {
+    return NextResponse.json({ error: 'Unauthorized: Admin or Manager only' }, { status: 401 });
   }
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    const existing = await prisma.purchaseRequest.findUnique({ where: { id: Number(id) } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Purchase not found' }, { status: 404 });
+    }
+
+    const paidOrLaterStatuses = ['PAID_AND_ORDERED', 'PAID', 'PAID_EXPENSE', 'POA_ISSUED', 'IN_TRANSIT', 'DELIVERED'];
+    if (user.role === 'MANAGER' && paidOrLaterStatuses.includes(existing.status)) {
+      return NextResponse.json(
+        { error: 'Руководитель может удалять только заявки до проведения оплаты' },
+        { status: 403 }
+      );
     }
 
     await prisma.purchaseRequest.delete({

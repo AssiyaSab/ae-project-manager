@@ -1283,7 +1283,7 @@ export async function handleIncomingBotMessage(
 
     const trip = await prisma.businessTrip.update({
       where: { id: tripId },
-      data: { status: isApprove ? 'APPROVED' : 'REJECTED' },
+      data: { status: isApprove ? 'APPROVED_FOR_PAYMENT' : 'REJECTED' },
       include: { employee: true, project: true }
     });
 

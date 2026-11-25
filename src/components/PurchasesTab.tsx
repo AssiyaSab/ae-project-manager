@@ -5,9 +5,14 @@ import { ru } from 'date-fns/locale';
 import { formatDate } from '@/lib/formatters';
 import { useReactToPrint } from 'react-to-print';
 import PrintPurchaseRequest from './PrintPurchaseRequest';
+import { useToast } from './ToastProvider';
+import { fileToCompressedDataUrl, compressImageIfNeeded } from '@/lib/imageCompression';
 
 export default function PurchasesTab({ currentUser, projects, users, highlightPurchaseId }: any) {
+  const { showToast } = useToast();
   const [purchases, setPurchases] = useState<any[]>([]);
+  const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [confirmedKey, setConfirmedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (highlightPurchaseId) {
@@ -30,6 +35,8 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const [purchaseAmount, setPurchaseAmount] = useState('');
   const [purchaseProject, setPurchaseProject] = useState('');
   const [purchaseFileUrl, setPurchaseFileUrl] = useState('');
+  const [directToDirector, setDirectToDirector] = useState(false);
+  const [directInvoiceFileUrl, setDirectInvoiceFileUrl] = useState('');
   const [purchaseItems, setPurchaseItems] = useState<{ name: string; quantity: number; unit: string; price?: number }[]>([]);
   const [isParsingSpec, setIsParsingSpec] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
@@ -65,6 +72,20 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const [poaDate, setPoaDate] = useState('');
   const [poaIssuedTo, setPoaIssuedTo] = useState('');
   const [poaFileUrl, setPoaFileUrl] = useState('');
+  const [poaIsEdo, setPoaIsEdo] = useState(false);
+
+  // Expanded Items & Multi-Invoice Modal State
+  const [expandedPurchaseIds, setExpandedPurchaseIds] = useState<number[]>([]);
+  const [multiInvoiceModalPurchase, setMultiInvoiceModalPurchase] = useState<any>(null);
+  const [multiInvSupplier, setMultiInvSupplier] = useState('');
+  const [multiInvNumber, setMultiInvNumber] = useState('');
+  const [multiInvAmount, setMultiInvAmount] = useState('');
+  const [multiInvFileUrl, setMultiInvFileUrl] = useState('');
+  const [multiInvItemIds, setMultiInvItemIds] = useState<number[]>([]);
+
+  // Warehouse Delivery Note Modal State
+  const [deliveryModalPurchase, setDeliveryModalPurchase] = useState<any>(null);
+  const [deliveryNoteUrl, setDeliveryNoteUrl] = useState('');
 
   // Print Ref
   const purchasePrintRef = useRef(null);
@@ -126,20 +147,25 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
           amount: purchaseAmount ? Number(purchaseAmount) : 0,
           projectId: purchaseProject,
           fileUrl: purchaseFileUrl,
+          directToDirector: role === 'MANAGER' && purchaseType === 'INVOICE' && directToDirector,
+          invoiceFileUrl: role === 'MANAGER' && purchaseType === 'INVOICE' && directToDirector ? directInvoiceFileUrl : undefined,
           requesterId: currentUser?.id && currentUser.id > 0 && currentUser.id !== 999 ? currentUser.id : undefined,
           items: purchaseItems.filter(item => item.name.trim().length > 0)
         })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error || 'Не удалось создать заявку. Проверьте заполненные поля.');
+        showToast(data.error || 'Не удалось создать заявку', 'error');
         return;
       }
       setPurchaseTitle(''); 
       setPurchaseAmount(''); 
       setPurchaseProject(''); 
       setPurchaseFileUrl('');
+      setDirectToDirector(false);
+      setDirectInvoiceFileUrl('');
       setPurchaseItems([]);
+      showToast('✅ Заявка успешно создана', 'success');
       setUploadedFiles([]);
       setStatusFilter('ALL');
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -282,7 +308,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     }
   };
 
-  const updatePurchaseStatus = async (id: number, status: string, extraData: any = {}) => {
+  const updatePurchaseStatus = async (id: number, status: string, extraData: any = {}, actionKey?: string) => {
+    const key = actionKey || `pur_${id}_${status}`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
     try {
       const res = await fetch('/api/purchases', {
         method: 'PATCH',
@@ -296,12 +325,18 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Ошибка при обновлении статуса');
+        showToast(data.error || 'Ошибка при обновлении статуса', 'error');
         return;
       }
+      setConfirmedKey(key);
+      showToast('✅ Статус заявки обновлен', 'success');
+      setTimeout(() => setConfirmedKey((prev) => (prev === key ? null : prev)), 1800);
       fetchData();
     } catch (e) {
       console.error(e);
+      showToast('Ошибка сети при обновлении статуса', 'error');
+    } finally {
+      setLoadingKey(null);
     }
   };
 
@@ -312,7 +347,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
       if (!enteredPin) return;
       pinCode = enteredPin.trim();
     }
-    await updatePurchaseStatus(p.id, 'APPROVED_FOR_PAYMENT', { pinCode });
+    await updatePurchaseStatus(p.id, 'APPROVED_FOR_PAYMENT', { pinCode }, `pur_${p.id}_APPROVED_FOR_PAYMENT`);
   };
 
   // Open Supply Modal
@@ -329,21 +364,16 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     if (supplyFileInputRef.current) supplyFileInputRef.current.value = '';
   };
 
-  const handleSupplyFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSupplyFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+      const rawFile = e.target.files[0];
+      const file = await compressImageIfNeeded(rawFile);
       setSupplyInvoiceFile(file);
-      // Если файл <= 3.5 МБ, сохраняем его Data URI прямо в invoiceFileUrl для просмотра/скачивания
       if (file.size <= 3.5 * 1024 * 1024) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (typeof reader.result === 'string') {
-            setSupplyInvoiceFileUrl(reader.result);
-          }
-        };
-        reader.readAsDataURL(file);
+        const dataUrl = await fileToCompressedDataUrl(file);
+        setSupplyInvoiceFileUrl(dataUrl);
       } else {
-        alert('Файл больше 3.5 МБ: ИИ сможет распознать реквизиты, но для сохранения ссылки на файл лучше загрузить его на Google Диск и вставить ссылку.');
+        showToast('Файл больше 3.5 МБ: лучше вставить ссылку на Google Диск', 'info');
       }
     }
   };
@@ -451,11 +481,15 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     setPoaDate(p.poaDate ? new Date(p.poaDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
     setPoaIssuedTo(p.poaIssuedTo || p.supplyUser?.name || '');
     setPoaFileUrl(p.poaFileUrl || '');
+    setPoaIsEdo(Boolean(p.poaIsEdo));
   };
 
   const handlePoaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!poaModalPurchase) return;
+    const key = `poa_${poaModalPurchase.id}`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
     try {
       const res = await fetch('/api/purchases', {
         method: 'PATCH',
@@ -471,19 +505,155 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
           poaNumber: poaNumber.trim(),
           poaDate: poaDate || null,
           poaIssuedTo: poaIssuedTo.trim(),
-          poaFileUrl: poaFileUrl.trim() || null,
+          poaFileUrl: poaIsEdo ? null : (poaFileUrl.trim() || null),
+          poaIsEdo,
         })
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err.error || 'Не удалось сохранить доверенность');
+        showToast(err.error || 'Не удалось сохранить доверенность', 'error');
         return;
       }
+      showToast(poaIsEdo ? '📡 Доверенность Д-1 (ЭДО) оформлена' : '📜 Доверенность Д-1 оформлена', 'success');
       setPoaModalPurchase(null);
       fetchData();
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoadingKey(null);
     }
+  };
+
+  const toggleExpandPurchase = (id: number) => {
+    setExpandedPurchaseIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleMarkItemFromStock = async (purchaseId: number, itemId: number) => {
+    const key = `item_stock_${itemId}`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
+    try {
+      const res = await fetch('/api/purchases', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': pass || '',
+          'x-auth-password': pass || '',
+          'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+        },
+        body: JSON.stringify({ id: purchaseId, action: 'MARK_ITEM_FROM_STOCK', itemId })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Ошибка списания со склада', 'error');
+        return;
+      }
+      showToast('📦 Позиция закрыта со склада', 'success');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
+  const openMultiInvoiceModal = (p: any) => {
+    setMultiInvoiceModalPurchase(p);
+    setMultiInvSupplier('');
+    setMultiInvNumber('');
+    setMultiInvAmount('');
+    setMultiInvFileUrl('');
+    const pendingIds = (p.items || []).filter((it: any) => it.sourceType === 'PENDING').map((it: any) => it.id);
+    setMultiInvItemIds(pendingIds);
+  };
+
+  const handleCreateMultiInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!multiInvoiceModalPurchase) return;
+    const key = `multi_inv_create_${multiInvoiceModalPurchase.id}`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
+    try {
+      const res = await fetch('/api/purchases/invoices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': pass || '',
+          'x-auth-password': pass || '',
+          'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+        },
+        body: JSON.stringify({
+          purchaseId: multiInvoiceModalPurchase.id,
+          supplierName: multiInvSupplier.trim(),
+          invoiceNumber: multiInvNumber.trim(),
+          amount: Number(multiInvAmount),
+          fileUrl: multiInvFileUrl.trim() || null,
+          itemIds: multiInvItemIds,
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || 'Ошибка добавления счета', 'error');
+        return;
+      }
+      showToast('✅ Счет на оплату добавлен', 'success');
+      setMultiInvoiceModalPurchase(null);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
+  const handleMultiInvoiceAction = async (invoiceId: number, action: 'APPROVE' | 'PAY' | 'REJECT', amount: number) => {
+    let pinCode: string | undefined;
+    if (action === 'APPROVE' && amount >= 500000) {
+      const entered = window.prompt(`🔒 Сумма счета ${amount.toLocaleString('ru-RU')} ₸ >= 500 000 ₸. Введите 4-значный ПИН-код:`);
+      if (!entered) return;
+      pinCode = entered.trim();
+    }
+    const key = `inv_${invoiceId}_${action}`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
+    try {
+      const res = await fetch('/api/purchases/invoices', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': pass || '',
+          'x-auth-password': pass || '',
+          'x-auth-login': localStorage.getItem('ae_auth_login') || ''
+        },
+        body: JSON.stringify({ invoiceId, action, pinCode })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || 'Ошибка обновления счета', 'error');
+        return;
+      }
+      setConfirmedKey(key);
+      showToast(action === 'PAY' ? '💳 Счет оплачен, позиции отмечены' : '✅ Счет обновлен', 'success');
+      setTimeout(() => setConfirmedKey((prev) => (prev === key ? null : prev)), 1800);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
+  const handleDeliveryConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deliveryModalPurchase) return;
+    await updatePurchaseStatus(
+      deliveryModalPurchase.id,
+      'DELIVERED',
+      { deliveryNoteUrl: deliveryNoteUrl.trim() || null },
+      `pur_${deliveryModalPurchase.id}_DELIVERED`
+    );
+    setDeliveryModalPurchase(null);
+    setDeliveryNoteUrl('');
   };
 
   const handleDeletePurchase = async (id: number) => {
@@ -981,6 +1151,57 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
               )}
             </div>
           )}
+          {role === 'MANAGER' && purchaseType === 'INVOICE' && (
+            <div style={{ marginTop: '14px', padding: '12px 14px', background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.3)', borderRadius: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.88rem', color: '#c4b5fd' }}>
+                <input
+                  type="checkbox"
+                  checked={directToDirector}
+                  onChange={(e) => setDirectToDirector(e.target.checked)}
+                />
+                ⚡ Прикрепить счет сразу (минуя снабжение, напрямую Директору)
+              </label>
+              {directToDirector && (
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                  <div style={{ flex: '1 1 180px' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Сумма счета (₸) *</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      min="1"
+                      placeholder="Сумма счета"
+                      value={purchaseAmount}
+                      onChange={(e) => setPurchaseAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div style={{ flex: '2 1 280px' }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Файл счета (PDF / фото) или ссылка</label>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <input
+                        className="form-input"
+                        placeholder="https://... или загрузите файл"
+                        value={directInvoiceFileUrl}
+                        onChange={(e) => setDirectInvoiceFileUrl(e.target.value)}
+                      />
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        style={{ maxWidth: '160px', fontSize: '0.75rem' }}
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          const url = await fileToCompressedDataUrl(f);
+                          setDirectInvoiceFileUrl(url);
+                          showToast('📎 Счет прикреплен и сжат', 'info');
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </form>
 
         {/* АНАЛИТИКА И ФИЛЬТР ПО НАПРАВЛЕНИЯМ (КИПиА / ЭЛЕКТРИКА) */}
@@ -1131,8 +1352,8 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
             </thead>
             <tbody>
               {filteredPurchases.map(p => (
+                <React.Fragment key={p.id}>
                 <tr
-                  key={p.id}
                   id={`purchase-row-${p.id}`}
                   style={{
                     borderBottom: '1px solid var(--border-color)',
@@ -1187,21 +1408,51 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       </div>
                     )}
 
-                    {p.items && p.items.length > 0 && (
-                      <div style={{ marginTop: '5px' }}>
-                        <span style={{ 
-                          fontSize: '0.75rem', 
-                          background: 'rgba(56, 189, 248, 0.1)', 
-                          color: '#38bdf8', 
-                          border: '1px solid rgba(56, 189, 248, 0.25)', 
-                          padding: '2px 8px', 
-                          borderRadius: '10px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          📦 Спецификация: <strong>{p.items.length} поз.</strong>
-                        </span>
+                    {p.items && p.items.length > 0 && (() => {
+                      const stockCount = p.items.filter((it: any) => it.sourceType === 'FROM_STOCK').length;
+                      const invCount = p.items.filter((it: any) => it.sourceType === 'INVOICE').length;
+                      const closedCount = stockCount + invCount;
+                      const isAllClosed = closedCount === p.items.length;
+                      const isExpanded = expandedPurchaseIds.includes(p.id);
+                      return (
+                        <div style={{ marginTop: '6px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{
+                            fontSize: '0.74rem',
+                            background: isAllClosed ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.1)',
+                            color: isAllClosed ? '#34d399' : '#38bdf8',
+                            border: isAllClosed ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(56, 189, 248, 0.25)',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontWeight: 600
+                          }}>
+                            {isAllClosed
+                              ? `✅ Все позиции закрыты (100% — ${p.items.length} поз.)`
+                              : `Закрыто: ${closedCount} из ${p.items.length} поз. (Склад: ${stockCount}, Счета: ${invCount})`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleExpandPurchase(p.id)}
+                            className="inline-btn"
+                            style={{ fontSize: '0.72rem', padding: '2px 8px', background: 'rgba(255,255,255,0.08)', color: '#e2e8f0' }}
+                          >
+                            {isExpanded ? '▲ Скрыть позиции' : '▼ Позиции и счета'}
+                          </button>
+                        </div>
+                      );
+                    })()}
+                    {(!p.items || p.items.length === 0) && p.invoices && p.invoices.length > 0 && (
+                      <div style={{ marginTop: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => toggleExpandPurchase(p.id)}
+                          className="inline-btn"
+                          style={{ fontSize: '0.72rem', padding: '2px 8px', background: 'rgba(255,255,255,0.08)', color: '#e2e8f0' }}
+                        >
+                          {expandedPurchaseIds.includes(p.id) ? '▲ Скрыть счета' : `▼ Счета (${p.invoices.length})`}
+                        </button>
                       </div>
                     )}
 
@@ -1241,8 +1492,13 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         borderRadius: '6px', 
                         fontSize: '0.8rem' 
                       }}>
-                        <div style={{ fontWeight: 600, color: '#c4b5fd' }}>
-                          📜 Доверенность Д-1 №{p.poaNumber} {p.poaDate ? `от ${formatDate(p.poaDate)}` : ''}
+                        <div style={{ fontWeight: 600, color: '#c4b5fd', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span>📜 Доверенность Д-1 №{p.poaNumber} {p.poaDate ? `от ${formatDate(p.poaDate)}` : ''}</span>
+                          {p.poaIsEdo && (
+                            <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '10px', background: 'rgba(14, 165, 233, 0.2)', color: '#38bdf8', border: '1px solid rgba(14, 165, 233, 0.4)' }}>
+                              📡 Отправлено по ЭДО
+                            </span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', gap: '15px', marginTop: '3px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                           {p.poaIssuedTo && <span>Выдана на: <strong>{p.poaIssuedTo}</strong></span>}
@@ -1289,6 +1545,11 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                           📎 Вложение
                         </a>
                       )}
+                      {p.deliveryNoteUrl && (
+                        <a href={p.deliveryNoteUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2dd4bf', textDecoration: 'underline' }}>
+                          📄 Накладная
+                        </a>
+                      )}
                     </div>
                   </td>
 
@@ -1299,71 +1560,107 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       {/* 1. GIP APPROVAL OF INITIAL NEED */}
                       {(p.status === 'PENDING_APPROVAL' || p.status === 'PENDING') && isGipOrManager && (
                         <>
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'IN_PROCUREMENT')} 
-                            className="inline-btn" 
-                            style={{ background: '#10b981', color: '#fff' }}
-                            title="Одобрить потребность и передать в снабжение"
-                          >
-                            ✅ В снабжение
-                          </button>
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'REJECTED')} 
-                            className="inline-btn" 
+                          {(() => {
+                            const k = `pur_${p.id}_IN_PROCUREMENT`;
+                            const isL = loadingKey === k;
+                            const isC = confirmedKey === k;
+                            return (
+                              <button
+                                disabled={isL}
+                                onClick={() => updatePurchaseStatus(p.id, 'IN_PROCUREMENT', {}, k)}
+                                className="inline-btn"
+                                style={{ background: '#10b981', color: '#fff', opacity: isL ? 0.7 : 1 }}
+                                title="Одобрить потребность и передать в снабжение"
+                              >
+                                {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ В снабжение'}
+                              </button>
+                            );
+                          })()}
+                          <button
+                            disabled={loadingKey === `pur_${p.id}_REJECTED`}
+                            onClick={() => updatePurchaseStatus(p.id, 'REJECTED', {}, `pur_${p.id}_REJECTED`)}
+                            className="inline-btn"
                             style={{ background: '#ef4444', color: '#fff' }}
                             title="Отклонить заявку"
                           >
-                            ❌
+                            {loadingKey === `pur_${p.id}_REJECTED` ? '⏳...' : '❌'}
                           </button>
                         </>
                       )}
 
-                      {/* 2. SUPPLY ACTION: PROCESS INVOICE */}
+                      {/* 2. SUPPLY ACTION: PROCESS INVOICE & MULTI-INVOICE */}
                       {(p.status === 'IN_PROCUREMENT' || p.status === 'PENDING_APPROVAL' || p.status === 'PENDING_PAYMENT_APPROVAL' || p.status === 'APPROVED') && isSupply && (
-                        <button 
-                          onClick={() => openSupplyModal(p)} 
-                          className="inline-btn" 
-                          style={{ background: '#3b82f6', color: '#fff' }}
-                          title="Внести данные поставщика, счет и сумму"
-                        >
-                          📝 Внести счет
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => openSupplyModal(p)} 
+                            className="inline-btn" 
+                            style={{ background: '#3b82f6', color: '#fff' }}
+                            title="Внести данные поставщика, счет и сумму"
+                          >
+                            📝 Внести счет
+                          </button>
+                          {p.items && p.items.length > 0 && (
+                            <button
+                              onClick={() => openMultiInvoiceModal(p)}
+                              className="inline-btn"
+                              style={{ background: '#0ea5e9', color: '#fff' }}
+                              title="Добавить отдельный счет и привязать позиции"
+                            >
+                              + Добавить счет на оплату
+                            </button>
+                          )}
+                        </>
                       )}
 
                       {/* 3. GIP APPROVAL OF INVOICE PRICE */}
                       {p.status === 'PENDING_PAYMENT_APPROVAL' && isGipOrManager && (
                         <>
-                          <button 
-                            onClick={() => handleApproveInvoice(p)} 
-                            className="inline-btn" 
-                            style={{ background: '#10b981', color: '#fff' }}
-                            title="Утвердить сумму счета и передать на оплату в бухгалтерию"
-                          >
-                            ✅ Утвердить к оплате
-                          </button>
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'IN_PROCUREMENT')} 
-                            className="inline-btn" 
+                          {(() => {
+                            const k = `pur_${p.id}_APPROVED_FOR_PAYMENT`;
+                            const isL = loadingKey === k;
+                            const isC = confirmedKey === k;
+                            return (
+                              <button
+                                disabled={isL}
+                                onClick={() => handleApproveInvoice(p)}
+                                className="inline-btn"
+                                style={{ background: '#10b981', color: '#fff', opacity: isL ? 0.7 : 1 }}
+                                title="Утвердить сумму счета и передать на оплату в бухгалтерию"
+                              >
+                                {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ Утвердить к оплате'}
+                              </button>
+                            );
+                          })()}
+                          <button
+                            disabled={loadingKey === `pur_${p.id}_RESUBMIT`}
+                            onClick={() => updatePurchaseStatus(p.id, 'IN_PROCUREMENT', {}, `pur_${p.id}_RESUBMIT`)}
+                            className="inline-btn"
                             style={{ background: '#f59e0b', color: '#fff' }}
                             title="Вернуть снабженцу на пересогласование цены"
                           >
-                            ↩️ Пересогласовать
+                            {loadingKey === `pur_${p.id}_RESUBMIT` ? '⏳ Сохранение...' : '↩️ Пересогласовать'}
                           </button>
                         </>
                       )}
 
                       {/* 4. CHIEF ACCOUNTANT PAYMENT ACTION */}
                       {(p.status === 'APPROVED_FOR_PAYMENT' || p.status === 'APPROVED') && (
-                        isChiefAccountant ? (
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'PAID_AND_ORDERED')} 
-                            className="inline-btn" 
-                            style={{ background: '#10b981', color: '#fff', fontWeight: 600 }}
-                            title="Главный бухгалтер: подтвердить оплату счета"
-                          >
-                            💳 Подтвердить оплату
-                          </button>
-                        ) : isAccountant ? (
+                        isChiefAccountant ? (() => {
+                          const k = `pur_${p.id}_PAID_AND_ORDERED`;
+                          const isL = loadingKey === k;
+                          const isC = confirmedKey === k;
+                          return (
+                            <button
+                              disabled={isL}
+                              onClick={() => updatePurchaseStatus(p.id, 'PAID_AND_ORDERED', {}, k)}
+                              className="inline-btn"
+                              style={{ background: '#10b981', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
+                              title="Главный бухгалтер: подтвердить оплату счета"
+                            >
+                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '💳 Подтвердить оплату'}
+                            </button>
+                          );
+                        })() : isAccountant ? (
                           <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>
                             ⏳ Ждет оплаты Главбухом
                           </span>
@@ -1395,35 +1692,50 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       {/* 5. EXPENSE APPROVAL & PAYMENT */}
                       {p.status === 'PENDING_EXPENSE' && isGipOrManager && (
                         <>
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'APPROVED_EXPENSE')} 
-                            className="inline-btn" 
-                            style={{ background: '#10b981', color: '#fff' }}
-                            title="Одобрить чек подотчета"
-                          >
-                            ✅ Одобрить подотчет
-                          </button>
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'REJECTED')} 
-                            className="inline-btn" 
+                          {(() => {
+                            const k = `pur_${p.id}_APPROVED_EXPENSE`;
+                            const isL = loadingKey === k;
+                            const isC = confirmedKey === k;
+                            return (
+                              <button
+                                disabled={isL}
+                                onClick={() => updatePurchaseStatus(p.id, 'APPROVED_EXPENSE', {}, k)}
+                                className="inline-btn"
+                                style={{ background: '#10b981', color: '#fff', opacity: isL ? 0.7 : 1 }}
+                                title="Одобрить чек подотчета"
+                              >
+                                {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ Одобрить подотчет'}
+                              </button>
+                            );
+                          })()}
+                          <button
+                            disabled={loadingKey === `pur_${p.id}_REJECTED`}
+                            onClick={() => updatePurchaseStatus(p.id, 'REJECTED', {}, `pur_${p.id}_REJECTED`)}
+                            className="inline-btn"
                             style={{ background: '#ef4444', color: '#fff' }}
                           >
-                            ❌
+                            {loadingKey === `pur_${p.id}_REJECTED` ? '⏳...' : '❌'}
                           </button>
                         </>
                       )}
 
                       {p.status === 'APPROVED_EXPENSE' && (
-                        isChiefAccountant ? (
-                          <button 
-                            onClick={() => updatePurchaseStatus(p.id, 'PAID_EXPENSE')} 
-                            className="inline-btn" 
-                            style={{ background: '#10b981', color: '#fff', fontWeight: 600 }}
-                            title="Главный бухгалтер: выплатить подотчет"
-                          >
-                            💳 Выплатить
-                          </button>
-                        ) : isAccountant ? (
+                        isChiefAccountant ? (() => {
+                          const k = `pur_${p.id}_PAID_EXPENSE`;
+                          const isL = loadingKey === k;
+                          const isC = confirmedKey === k;
+                          return (
+                            <button
+                              disabled={isL}
+                              onClick={() => updatePurchaseStatus(p.id, 'PAID_EXPENSE', {}, k)}
+                              className="inline-btn"
+                              style={{ background: '#10b981', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
+                              title="Главный бухгалтер: выплатить подотчет"
+                            >
+                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '💳 Выплатить'}
+                            </button>
+                          );
+                        })() : isAccountant ? (
                           <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>
                             ⏳ К выплате (Главбух)
                           </span>
@@ -1431,36 +1743,45 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       )}
 
                       {/* 6. SUPPLY: PICKED UP AT SUPPLIER / IN TRANSIT */}
-                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isSupply || isGipOrManager) && (
-                        <button 
-                          onClick={() => updatePurchaseStatus(p.id, 'IN_TRANSIT')} 
-                          className="inline-btn" 
-                          style={{ background: '#3b82f6', color: '#fff', fontWeight: 600 }}
-                          title="Товар получен у поставщика / Везем на склад"
-                        >
-                          🚚 Везем на склад
-                        </button>
-                      )}
+                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isSupply || isGipOrManager) && (() => {
+                        const k = `pur_${p.id}_IN_TRANSIT`;
+                        const isL = loadingKey === k;
+                        const isC = confirmedKey === k;
+                        return (
+                          <button
+                            disabled={isL}
+                            onClick={() => updatePurchaseStatus(p.id, 'IN_TRANSIT', {}, k)}
+                            className="inline-btn"
+                            style={{ background: isC ? '#10b981' : '#3b82f6', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
+                            title="Товар получен у поставщика / Везем на склад"
+                          >
+                            {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '🚚 Везем на склад'}
+                          </button>
+                        );
+                      })()}
 
-                      {/* 7. WAREHOUSE: RECEIVE AT WAREHOUSE */}
+                      {/* 7. WAREHOUSE: RECEIVE AT WAREHOUSE WITH DELIVERY NOTE */}
                       {(p.status === 'IN_TRANSIT' || p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isWarehouse || isGipOrManager) && (
-                        <button 
-                          onClick={() => updatePurchaseStatus(p.id, 'DELIVERED')} 
-                          className="inline-btn" 
+                        <button
+                          onClick={() => {
+                            setDeliveryModalPurchase(p);
+                            setDeliveryNoteUrl(p.deliveryNoteUrl || '');
+                          }}
+                          className="inline-btn"
                           style={{ background: '#14b8a6', color: '#fff', fontWeight: 600 }}
-                          title="Кладовщик проверил и принял ТМЦ на склад"
+                          title="Кладовщик проверил и принял ТМЦ на склад (с загрузкой накладной)"
                         >
                           📦 Принять на склад
                         </button>
                       )}
 
-                      {/* 7. ADMIN / MANAGER CONTROLS */}
+                      {/* 8. ADMIN / MANAGER CONTROLS */}
                       {isGipOrManager && (
                         <button onClick={() => setEditingPurchase(p)} className="inline-btn" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }} title="Редактировать заявку">
                           ✏️
                         </button>
                       )}
-                      {role === 'ADMIN' && (
+                      {(role === 'ADMIN' || (role === 'MANAGER' && !['PAID_AND_ORDERED', 'PAID', 'PAID_EXPENSE', 'POA_ISSUED', 'IN_TRANSIT', 'DELIVERED'].includes(p.status))) && (
                         <button onClick={() => handleDeletePurchase(p.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }} title="Удалить заявку">
                           🗑️
                         </button>
@@ -1470,6 +1791,123 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                   </td>
 
                 </tr>
+                {expandedPurchaseIds.includes(p.id) && (
+                  <tr style={{ background: 'rgba(15, 23, 42, 0.55)', borderBottom: '1px solid var(--border-color)' }}>
+                    <td colSpan={6} style={{ padding: '14px 18px' }}>
+                      {/* Позиции заявки */}
+                      {p.items && p.items.length > 0 && (
+                        <div style={{ marginBottom: '14px' }}>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>📋 Позиции спецификации ({p.items.length})</span>
+                            {isSupply && (
+                              <button
+                                type="button"
+                                onClick={() => openMultiInvoiceModal(p)}
+                                className="inline-btn"
+                                style={{ background: '#0ea5e9', color: '#fff', fontSize: '0.75rem', padding: '4px 10px' }}
+                              >
+                                + Добавить счет на оплату
+                              </button>
+                            )}
+                          </div>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', background: 'rgba(255,255,255,0.02)', borderRadius: '6px' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)' }}>
+                                <th style={{ padding: '6px 8px', textAlign: 'left' }}>Наименование</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'center' }}>Кол-во</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'left' }}>Обеспечение</th>
+                                <th style={{ padding: '6px 8px', textAlign: 'right' }}>Действие</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {p.items.map((it: any) => (
+                                <tr key={it.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                  <td style={{ padding: '6px 8px' }}>{it.name}</td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>{it.quantity} {it.unit}</td>
+                                  <td style={{ padding: '6px 8px' }}>
+                                    {it.sourceType === 'FROM_STOCK' ? (
+                                      <span style={{ color: '#2dd4bf', fontWeight: 600 }}>📦 Взято со склада</span>
+                                    ) : it.sourceType === 'INVOICE' ? (
+                                      <span style={{ color: it.isPaid ? '#10b981' : '#a78bfa', fontWeight: 600 }}>
+                                        📄 По счету {it.invoice?.invoiceNumber ? `№${it.invoice.invoiceNumber}` : `#${it.invoiceId}`}
+                                        {it.isPaid ? ' (💳 Оплачено)' : ' (Ожидает оплаты)'}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: '#f59e0b' }}>⏳ Не закрыто</span>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                                    {it.sourceType === 'PENDING' && (isSupply || isWarehouse || isGipOrManager) && (
+                                      <button
+                                        type="button"
+                                        disabled={loadingKey === `item_stock_${it.id}`}
+                                        onClick={() => handleMarkItemFromStock(p.id, it.id)}
+                                        className="inline-btn"
+                                        style={{ fontSize: '0.72rem', padding: '3px 8px', background: 'rgba(20, 184, 166, 0.2)', color: '#2dd4bf' }}
+                                      >
+                                        {loadingKey === `item_stock_${it.id}` ? '⏳...' : '📦 Взять со склада'}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Счета по заявке (PurchaseInvoice) */}
+                      {p.invoices && p.invoices.length > 0 && (
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#c4b5fd' }}>
+                            📑 Привязанные счета на оплату ({p.invoices.length})
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {p.invoices.map((inv: any) => (
+                              <div key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', fontSize: '0.8rem' }}>
+                                <div>
+                                  <strong>{inv.supplierName || 'Поставщик'}</strong> {inv.invoiceNumber ? `• Счет №${inv.invoiceNumber}` : ''} — <strong>{inv.amount.toLocaleString('ru-RU')} ₸</strong>
+                                  <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>({inv.items?.length || 0} поз.)</span>
+                                  {inv.fileUrl && (
+                                    <a href={inv.fileUrl} target="_blank" rel="noreferrer" style={{ marginLeft: '10px', color: '#38bdf8', textDecoration: 'underline' }}>
+                                      📎 Файл счета
+                                    </a>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', background: inv.status === 'PAID' ? 'rgba(16,185,129,0.2)' : inv.status === 'APPROVED_FOR_PAYMENT' ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)', color: inv.status === 'PAID' ? '#10b981' : inv.status === 'APPROVED_FOR_PAYMENT' ? '#60a5fa' : '#f59e0b' }}>
+                                    {inv.status === 'PAID' ? 'ОПЛАЧЕН' : inv.status === 'APPROVED_FOR_PAYMENT' ? 'УТВЕРЖДЕН' : inv.status === 'REJECTED' ? 'ОТКЛОНЕН' : 'ЖДЕТ ДИРЕКТОРА'}
+                                  </span>
+                                  {inv.status === 'PENDING_APPROVAL' && isGipOrManager && (
+                                    <button
+                                      disabled={loadingKey === `inv_${inv.id}_APPROVE`}
+                                      onClick={() => handleMultiInvoiceAction(inv.id, 'APPROVE', inv.amount)}
+                                      className="inline-btn"
+                                      style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', padding: '3px 8px' }}
+                                    >
+                                      {loadingKey === `inv_${inv.id}_APPROVE` ? '⏳...' : '✅ Утвердить'}
+                                    </button>
+                                  )}
+                                  {inv.status === 'APPROVED_FOR_PAYMENT' && isChiefAccountant && (
+                                    <button
+                                      disabled={loadingKey === `inv_${inv.id}_PAY`}
+                                      onClick={() => handleMultiInvoiceAction(inv.id, 'PAY', inv.amount)}
+                                      className="inline-btn"
+                                      style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', padding: '3px 8px' }}
+                                    >
+                                      {loadingKey === `inv_${inv.id}_PAY` ? '⏳...' : '💳 Подтвердить оплату'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
               ))}
               {filteredPurchases.length === 0 && (
                 <tr>
@@ -1732,18 +2170,164 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                   required
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Ссылка на скан доверенности (опционально)</label>
-                <input
-                  className="form-input"
-                  placeholder="https://..."
-                  value={poaFileUrl}
-                  onChange={e => setPoaFileUrl(e.target.value)}
-                />
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setPoaIsEdo(false)}
+                  className="inline-btn"
+                  style={{ flex: 1, background: !poaIsEdo ? '#8b5cf6' : 'rgba(255,255,255,0.06)', color: !poaIsEdo ? '#fff' : 'var(--text-muted)' }}
+                >
+                  📎 Скан документа
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPoaIsEdo(true)}
+                  className="inline-btn"
+                  style={{ flex: 1, background: poaIsEdo ? '#0ea5e9' : 'rgba(255,255,255,0.06)', color: poaIsEdo ? '#fff' : 'var(--text-muted)' }}
+                >
+                  📡 Отправлено по ЭДО
+                </button>
               </div>
+              {!poaIsEdo && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Скан доверенности (ссылка или файл)</label>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <input
+                      className="form-input"
+                      placeholder="https://..."
+                      value={poaFileUrl}
+                      onChange={e => setPoaFileUrl(e.target.value)}
+                    />
+                    <input
+                      type="file"
+                      accept=".pdf,image/*"
+                      style={{ maxWidth: '140px', fontSize: '0.75rem' }}
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        const url = await fileToCompressedDataUrl(f);
+                        setPoaFileUrl(url);
+                        showToast('📎 Скан доверенности сжат и прикреплен', 'info');
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button type="button" className="inline-btn" onClick={() => setPoaModalPurchase(null)}>Отмена</button>
-                <button type="submit" className="btn-submit" style={{ background: '#8b5cf6' }}>📜 Выдать доверенность</button>
+                <button type="submit" disabled={loadingKey === `poa_${poaModalPurchase.id}`} className="btn-submit" style={{ background: poaIsEdo ? '#0ea5e9' : '#8b5cf6' }}>
+                  {loadingKey === `poa_${poaModalPurchase.id}` ? '⏳ Сохранение...' : poaIsEdo ? '📡 Сохранить (ЭДО)' : '📜 Выдать доверенность'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MULTI-INVOICE MODAL (+ Добавить счет на оплату) */}
+      {multiInvoiceModalPurchase && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="form-card" style={{ width: '520px', maxHeight: '90vh', overflowY: 'auto', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '6px' }}>📑 Добавить счет на оплату (Заявка #{multiInvoiceModalPurchase.id})</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '14px' }}>
+              {multiInvoiceModalPurchase.title}
+            </p>
+            <form onSubmit={handleCreateMultiInvoice} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <input className="form-input" placeholder="Поставщик (ТОО / ИП) *" value={multiInvSupplier} onChange={e => setMultiInvSupplier(e.target.value)} required />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input className="form-input" placeholder="Номер счета" value={multiInvNumber} onChange={e => setMultiInvNumber(e.target.value)} />
+                <input className="form-input" type="number" min="1" placeholder="Сумма счета (₸) *" value={multiInvAmount} onChange={e => setMultiInvAmount(e.target.value)} required />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Файл счета (PDF / фото) или ссылка</label>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <input className="form-input" placeholder="https://..." value={multiInvFileUrl} onChange={e => setMultiInvFileUrl(e.target.value)} />
+                  <input
+                    type="file"
+                    accept=".pdf,image/*"
+                    style={{ maxWidth: '150px', fontSize: '0.75rem' }}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const url = await fileToCompressedDataUrl(f);
+                      setMultiInvFileUrl(url);
+                      showToast('📎 Файл счета сжат и прикреплен', 'info');
+                    }}
+                  />
+                </div>
+              </div>
+              {multiInvoiceModalPurchase.items && multiInvoiceModalPurchase.items.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>Отметьте позиции, входящие в этот счет:</label>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {multiInvoiceModalPurchase.items.map((it: any) => {
+                      const disabled = it.sourceType !== 'PENDING';
+                      const checked = multiInvItemIds.includes(it.id);
+                      return (
+                        <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', opacity: disabled ? 0.45 : 1 }}>
+                          <input
+                            type="checkbox"
+                            disabled={disabled}
+                            checked={checked}
+                            onChange={(e) => {
+                              setMultiInvItemIds((prev) =>
+                                e.target.checked ? [...prev, it.id] : prev.filter((id) => id !== it.id)
+                              );
+                            }}
+                          />
+                          <span>{it.name} ({it.quantity} {it.unit})</span>
+                          {disabled && <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>({it.sourceType === 'FROM_STOCK' ? 'Склад' : 'Уже в счете'})</span>}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" className="inline-btn" onClick={() => setMultiInvoiceModalPurchase(null)}>Отмена</button>
+                <button type="submit" disabled={loadingKey === `multi_inv_create_${multiInvoiceModalPurchase.id}`} className="btn-submit">
+                  {loadingKey === `multi_inv_create_${multiInvoiceModalPurchase.id}` ? '⏳ Сохранение...' : 'Сохранить счет'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* WAREHOUSE DELIVERY NOTE MODAL (Приемка на склад) */}
+      {deliveryModalPurchase && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="form-card" style={{ width: '440px', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '6px' }}>📦 Приёмка на склад (Заявка #{deliveryModalPurchase.id})</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '14px' }}>
+              Прикрепите фото или PDF накладной при получении ТМЦ на склад.
+            </p>
+            <form onSubmit={handleDeliveryConfirm} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Фото / PDF накладной (авто-сжатие изображений)</label>
+                <input
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    const url = await fileToCompressedDataUrl(f);
+                    setDeliveryNoteUrl(url);
+                    showToast('📎 Накладная сжата и готова к отправке', 'info');
+                  }}
+                />
+              </div>
+              <input
+                className="form-input"
+                placeholder="Или вставьте ссылку на накладную (опционально)"
+                value={deliveryNoteUrl}
+                onChange={(e) => setDeliveryNoteUrl(e.target.value)}
+              />
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" className="inline-btn" onClick={() => setDeliveryModalPurchase(null)}>Отмена</button>
+                <button type="submit" disabled={loadingKey === `pur_${deliveryModalPurchase.id}_DELIVERED`} className="btn-submit" style={{ background: '#14b8a6' }}>
+                  {loadingKey === `pur_${deliveryModalPurchase.id}_DELIVERED` ? '⏳ Сохранение...' : '📦 Подтвердить приемку'}
+                </button>
               </div>
             </form>
           </div>

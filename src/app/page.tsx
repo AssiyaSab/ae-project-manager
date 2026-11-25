@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useToast, playNotificationSound } from '@/components/ToastProvider';
 import PurchasesTab from '@/components/PurchasesTab';
 import TripsTab from '@/components/TripsTab';
 import ToolsTab from '@/components/ToolsTab';
@@ -64,6 +65,8 @@ interface ChatMessage {
 }
 
 export default function Home() {
+  const { showToast } = useToast();
+  const knownTaskIdsRef = useRef<Set<number> | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks' | 'sales'>('dashboard');
   const [highlightPurchaseId, setHighlightPurchaseId] = useState<number | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -162,6 +165,67 @@ export default function Home() {
   };
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Запрос разрешения на системные уведомления и фоновая проверка новых задач раз в 30 сек
+  useEffect(() => {
+    if (!currentUser?.id || currentUser.id === 999) return;
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    const checkNewTasks = async () => {
+      const pass = adminPassword || localStorage.getItem('ae_admin_password') || '';
+      const login = loginUserId || localStorage.getItem('ae_auth_login') || currentUser.login || '';
+      if (!pass && !login) return;
+      try {
+        const res = await fetch(`/api/tasks?assigneeId=${currentUser.id}`, {
+          headers: {
+            'x-auth-login': login,
+            'x-auth-password': pass,
+            'x-admin-password': pass,
+          },
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const tasks: any[] = await res.json();
+        if (!Array.isArray(tasks)) return;
+        const activeTasks = tasks.filter((t) => t.status !== 'DONE');
+        const currentIds = new Set(activeTasks.map((t) => t.id));
+
+        if (knownTaskIdsRef.current === null) {
+          knownTaskIdsRef.current = currentIds;
+          return;
+        }
+
+        const newTasks = activeTasks.filter((t) => !knownTaskIdsRef.current!.has(t.id));
+        knownTaskIdsRef.current = currentIds;
+
+        if (newTasks.length > 0) {
+          playNotificationSound();
+          for (const nt of newTasks) {
+            const title = `Новая задача в AE Project Manager: ${nt.name}`;
+            showToast(`🔔 ${title}`, 'info');
+            if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('AE Project Manager', {
+                  body: title,
+                });
+              } catch {
+                // Ignore Notification constructor errors
+              }
+            }
+          }
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    };
+
+    checkNewTasks();
+    const timer = setInterval(checkNewTasks, 30000);
+    return () => clearInterval(timer);
+  }, [currentUser?.id, adminPassword, loginUserId, showToast]);
 
   // Fetch initial data
   const refreshData = async () => {
