@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { formatDate } from '@/lib/formatters';
 import { useReactToPrint } from 'react-to-print';
 import PrintSaleInvoice from './PrintSaleInvoice';
+import FilePreviewModal, { formatTelegramOrFileUrl } from './FilePreviewModal';
 import { 
   Plus, 
   Trash2, 
@@ -71,6 +72,7 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
   const [poaDate, setPoaDate] = useState(new Date().toISOString().split('T')[0]);
   const [issuedToName, setIssuedToName] = useState('');
   const [poaFileUrl, setPoaFileUrl] = useState('');
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null);
   const [shipError, setShipError] = useState('');
 
   // Print Invoice State
@@ -582,9 +584,14 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
                           <div style={{ color: 'var(--text-muted)' }}>от {order.powerOfAttorneyDate ? formatDate(order.powerOfAttorneyDate) : '-'}</div>
                           <div style={{ color: 'var(--text-main)' }}>Выдана: {order.issuedToName}</div>
                           {order.powerOfAttorneyFileUrl && (
-                            <a href={order.powerOfAttorneyFileUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#38bdf8', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(order.powerOfAttorneyFileUrl), title: `📑 Доверенность ${order.powerOfAttorneyNumber || ''}` })}
+                              className="inline-btn"
+                              style={{ color: '#38bdf8', background: 'rgba(56, 189, 248, 0.14)', fontSize: '0.73rem', padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: '3px', marginTop: '3px' }}
+                            >
                               <ExternalLink size={12} /> Скан документа
-                            </a>
+                            </button>
                           )}
                         </div>
                       ) : (
@@ -1104,6 +1111,8 @@ export default function SalesTab({ currentUser }: SalesTabProps) {
           </div>
         </div>
       )}
+
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
       {/* 8. Невидимый компонент для генерации и печати официального счета */}
       <div style={{ display: 'none' }}>

@@ -7,6 +7,7 @@ import { useReactToPrint } from 'react-to-print';
 import PrintPurchaseRequest from './PrintPurchaseRequest';
 import { useToast } from './ToastProvider';
 import { fileToCompressedDataUrl, compressImageIfNeeded } from '@/lib/imageCompression';
+import FilePreviewModal, { formatTelegramOrFileUrl } from './FilePreviewModal';
 
 export default function PurchasesTab({ currentUser, projects, users, highlightPurchaseId }: any) {
   const { showToast } = useToast();
@@ -86,6 +87,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   // Warehouse Delivery Note Modal State
   const [deliveryModalPurchase, setDeliveryModalPurchase] = useState<any>(null);
   const [deliveryNoteUrl, setDeliveryNoteUrl] = useState('');
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null);
 
   // Print Ref
   const purchasePrintRef = useRef(null);
@@ -1528,27 +1530,49 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       <button onClick={() => generatePurchasePDF(p)} className="inline-btn" style={{ background: '#3b82f6', color: '#fff', fontSize: '0.75rem', padding: '4px 8px' }}>
                         📄 Заявка PDF
                       </button>
-                      
-                      {p.invoiceFileUrl && (
-                        <a 
-                          href={p.invoiceFileUrl.startsWith('data:') ? `/api/purchases/invoice-file?id=${p.id}` : p.invoiceFileUrl} 
-                          target="_blank" 
-                          rel="noreferrer" 
-                          style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline' }}
+
+                      {p.fileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(p.fileUrl), title: `📎 Чек / Спецификация (Заявка #${p.id})` })}
+                          className="inline-btn"
+                          style={{ background: 'rgba(56, 189, 248, 0.14)', color: '#38bdf8', fontSize: '0.73rem', padding: '3px 8px' }}
                         >
-                          📥 Счет поставщика
-                        </a>
+                          📎 Чек / Спецификация
+                        </button>
                       )}
 
-                      {p.fileUrl && !p.invoiceFileUrl && (
-                        <a href={p.fileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline' }}>
-                          📎 Вложение
-                        </a>
+                      {p.invoiceFileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: p.invoiceFileUrl.startsWith('data:') ? `/api/purchases/invoice-file?id=${p.id}` : formatTelegramOrFileUrl(p.invoiceFileUrl), title: `📄 Счет поставщика (Заявка #${p.id})` })}
+                          className="inline-btn"
+                          style={{ background: 'rgba(139, 92, 246, 0.16)', color: '#c4b5fd', fontSize: '0.73rem', padding: '3px 8px' }}
+                        >
+                          📄 Счет поставщика
+                        </button>
                       )}
+
+                      {p.poaFileUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(p.poaFileUrl), title: `📑 Доверенность Д-1 (Заявка #${p.id})` })}
+                          className="inline-btn"
+                          style={{ background: 'rgba(167, 139, 250, 0.16)', color: '#a78bfa', fontSize: '0.73rem', padding: '3px 8px' }}
+                        >
+                          📑 Доверенность Д-1
+                        </button>
+                      )}
+
                       {p.deliveryNoteUrl && (
-                        <a href={p.deliveryNoteUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2dd4bf', textDecoration: 'underline' }}>
-                          📄 Накладная
-                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(p.deliveryNoteUrl), title: `🚚 Накладная (Заявка #${p.id})` })}
+                          className="inline-btn"
+                          style={{ background: 'rgba(20, 184, 166, 0.16)', color: '#2dd4bf', fontSize: '0.73rem', padding: '3px 8px' }}
+                        >
+                          🚚 Накладная
+                        </button>
                       )}
                     </div>
                   </td>
@@ -2333,6 +2357,9 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
           </div>
         </div>
       )}
+
+      {/* FILE PREVIEW MODAL */}
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
       {/* HIDDEN PRINT COMPONENT */}
       <div style={{ display: 'none' }}>

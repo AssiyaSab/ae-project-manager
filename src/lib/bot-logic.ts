@@ -262,8 +262,7 @@ export async function handleIncomingBotMessage(
   // 1.5 Handle File Upload (Document / Photo)
   // =========================================================================
   if (fileContext && messageId && chatId) {
-    const { getTelegramFileUrl } = await import('./telegram');
-    const fileUrl = await getTelegramFileUrl(fileContext.fileId);
+    const fileUrl = `/api/files/telegram/${fileContext.fileId}`;
 
     // 1.5.0 Check if user is in step 3 of Purchase Wizard (PUR_WIZ_PHOTO)
     const wizPhotoLog = await prisma.auditLog.findFirst({

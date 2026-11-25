@@ -9,8 +9,10 @@ import PrintTripOrder from './PrintTripOrder';
 import PrintPurchaseRequest from './PrintPurchaseRequest';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import FilePreviewModal, { formatTelegramOrFileUrl } from './FilePreviewModal';
 
 export default function AccountingTab({ currentUser, projects, users }: any) {
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [trips, setTrips] = useState<any[]>([]);
   const [tools, setTools] = useState<any[]>([]);
@@ -668,9 +670,14 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
                         <div style={{ fontWeight: 600, color: '#a78bfa' }}>{p.poaNumber} {p.poaDate ? `от ${formatDate(p.poaDate)}` : ''}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Выдана: {p.poaIssuedTo}</div>
                         {p.poaFileUrl && (
-                          <a href={p.poaFileUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#38bdf8', textDecoration: 'underline' }}>
-                            Скан Д-1
-                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(p.poaFileUrl), title: `📑 Доверенность Д-1 (Заявка #${p.id})` })}
+                            className="inline-btn"
+                            style={{ fontSize: '0.73rem', padding: '2px 7px', background: 'rgba(56, 189, 248, 0.14)', color: '#38bdf8' }}
+                          >
+                            📑 Скан Д-1
+                          </button>
                         )}
                       </div>
                     ) : (
@@ -982,6 +989,7 @@ export default function AccountingTab({ currentUser, projects, users }: any) {
           </div>
         </div>
       )}
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
     </div>
   );
 }
