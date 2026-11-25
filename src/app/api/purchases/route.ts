@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 import { validateAuth, createAuditLog, isChiefAccountantUser } from '@/lib/auth';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { createOrUpdateSupplyTask, completeSupplyTask, cancelSupplyTask, createOrUpdatePaymentTask, completePaymentTask } from '@/lib/supply-tasks';
+import { reconcileProjectEstimate } from '@/lib/estimateReconcile';
 
 export async function GET(request: Request) {
   const user = await validateAuth(request);
@@ -265,7 +266,11 @@ export async function PATCH(request: Request) {
           invoiceId: null,
           isPaid: false,
         },
+        include: { purchase: { select: { projectId: true } } },
       });
+      if (updatedItem.purchase?.projectId) {
+        await reconcileProjectEstimate(updatedItem.purchase.projectId);
+      }
       await createAuditLog(user.id || null, 'PURCHASE_ITEM_STOCK', `Позиция #${itemId} заявки #${id} закрыта со склада`);
       return NextResponse.json(updatedItem);
     }
@@ -575,9 +580,10 @@ export async function PATCH(request: Request) {
           }
         }
 
-        // 5. Доставлено -> Уведомляем заявителя и завершаем задачу снабжения
+        // 5. Доставлено -> Уведомляем заявителя, завершаем задачу снабжения и сверяем смету
         if (status === 'DELIVERED') {
           await completeSupplyTask(updated.id);
+          await reconcileProjectEstimate(updated.projectId);
 
           if (updated.requester?.telegramId) {
             const msg = `🎉 *Материалы поступили!*\n\n` +

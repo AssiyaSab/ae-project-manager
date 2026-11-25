@@ -47,6 +47,7 @@ model Project {
   purchaseRequests PurchaseRequest[]
   businessTrips    BusinessTrip[]
   toolLogs         ToolLog[]
+  estimateItems    ProjectEstimateItem[]
 }
 
 model Task {
@@ -146,21 +147,43 @@ model PurchaseInvoice {
   items         PurchaseItem[]
 }
 
+model ProjectEstimateItem {
+  id              Int            @id @default(autoincrement())
+  projectId       Int
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String
+  article         String?
+  unit            String         @default("шт")
+  plannedQty      Float
+  plannedPrice    Float          @default(0)
+  plannedTotal    Float          @default(0)
+  status          String         @default("OPEN") // OPEN | CLOSED_PURCHASE | CLOSED_STOCK | REPLACED | PARTIAL
+  actualQty       Float          @default(0)
+  actualTotal     Float          @default(0)
+  replacementNote String?
+  purchaseItems   PurchaseItem[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
 model PurchaseItem {
-  id          Int              @id @default(autoincrement())
-  purchaseId  Int
-  purchase    PurchaseRequest  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
-  name        String
-  quantity    Float            @default(1)
-  unit        String           @default("шт")
-  price       Float            @default(0)
-  total       Float            @default(0)
-  sourceType  String           @default("PENDING") // PENDING | FROM_STOCK | INVOICE
-  invoiceId   Int?
-  invoice     PurchaseInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  isPaid      Boolean          @default(false)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id             Int                  @id @default(autoincrement())
+  purchaseId     Int
+  purchase       PurchaseRequest      @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  name           String
+  quantity       Float                @default(1)
+  unit           String               @default("шт")
+  price          Float                @default(0)
+  total          Float                @default(0)
+  sourceType     String               @default("PENDING") // PENDING | FROM_STOCK | INVOICE
+  invoiceId      Int?
+  invoice        PurchaseInvoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  isPaid         Boolean              @default(false)
+  estimateItemId Int?
+  estimateItem   ProjectEstimateItem? @relation(fields: [estimateItemId], references: [id], onDelete: SetNull)
+  isReplacement  Boolean              @default(false)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 }
 
 model BusinessTrip {

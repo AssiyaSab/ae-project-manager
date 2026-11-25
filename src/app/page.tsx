@@ -7,6 +7,7 @@ import TripsTab from '@/components/TripsTab';
 import ToolsTab from '@/components/ToolsTab';
 import AccountingTab from '@/components/AccountingTab';
 import SalesTab from '@/components/SalesTab';
+import ProjectEstimateModal from '@/components/ProjectEstimateModal';
 import { formatDate, formatDateTime } from '@/lib/formatters';
 
 interface User {
@@ -69,6 +70,7 @@ export default function Home() {
   const knownTaskIdsRef = useRef<Set<number> | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks' | 'sales'>('dashboard');
   const [highlightPurchaseId, setHighlightPurchaseId] = useState<number | null>(null);
+  const [estimateProject, setEstimateProject] = useState<{ id: number; name: string } | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   
   // Auth State
@@ -1261,6 +1263,15 @@ export default function Home() {
                           <div className="project-title-row">
                             <h3 className="project-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               {project.name}
+                              <button
+                                type="button"
+                                onClick={() => setEstimateProject({ id: project.id, name: project.name })}
+                                className="inline-btn"
+                                style={{ fontSize: '0.73rem', padding: '3px 9px', background: 'rgba(139, 92, 246, 0.2)', color: '#c4b5fd', border: '1px solid rgba(139, 92, 246, 0.35)', borderRadius: '6px' }}
+                                title="Открыть смету и сверку комплектации проекта"
+                              >
+                                📊 Смета и комплектация
+                              </button>
                               {currentUser?.role === 'ADMIN' && (
                                 <>
                                   <button 
@@ -2506,6 +2517,9 @@ export default function Home() {
             </form>
           </div>
         </div>
+      )}
+      {estimateProject && (
+        <ProjectEstimateModal project={estimateProject} onClose={() => setEstimateProject(null)} />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { validateAuth, createAuditLog, isChiefAccountantUser } from '@/lib/auth';
 import { sendTelegramMessage } from '@/lib/telegram';
 import { createOrUpdatePaymentTask } from '@/lib/supply-tasks';
+import { reconcileProjectEstimate } from '@/lib/estimateReconcile';
 
 export const dynamic = 'force-dynamic';
 
@@ -183,6 +184,8 @@ export async function PATCH(request: Request) {
         where: { invoiceId: invoice.id },
         data: { isPaid: true },
       });
+
+      await reconcileProjectEstimate(invoice.purchase.projectId);
 
       await createAuditLog(user.id || null, 'PAY_PURCHASE_INVOICE', `Оплачен счет #${invoice.id} по заявке #${invoice.purchaseId}`);
       return NextResponse.json(updated);
