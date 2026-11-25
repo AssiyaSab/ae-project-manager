@@ -1,6 +1,5 @@
 import React, { forwardRef } from 'react';
 import { formatDate } from '@/lib/formatters';
-import { DIRECTOR_STAMP_SIGNATURE_DATA_URI } from '@/lib/signatureData';
 
 interface PrintTripCertificateProps {
   trip: any;
@@ -20,11 +19,12 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
       ? 'дня'
       : 'дней';
 
-  const orderDate = formatDate(trip.createdAt);
-  const orderNumber = `${trip.id}-л/с`;
+  const orderDate = formatDate(trip.approvedAt || trip.createdAt);
+  const orderNumber = trip.orderNumber || `${trip.id}-л/с`;
+  const certNumber = trip.certificateNumber || String(trip.id);
   const docYear = start.getFullYear() || new Date().getFullYear();
 
-  const isApproved = trip.status === 'APPROVED' || trip.status === 'COMPLETED';
+  const isApproved = ['APPROVED_BY_DIRECTOR', 'DOCS_READY', 'PAID', 'DOCS_SUBMITTED', 'APPROVED_FOR_PAYMENT', 'APPROVED', 'COMPLETED'].includes(trip.status);
   const mintBg = '#d9ebe5';
 
   return (
@@ -107,21 +107,32 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
             boxSizing: 'border-box',
           }}
         >
-          {/* Шапка организации */}
-          <div style={{ borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '2px' }}>
-            <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '0.3px' }}>
-              ТОО &quot;АЗИЯЭНЕРГОАВТОМАТИКА&quot;
+          {/* Шапка организации + Штамп ОДОБРЕНО */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ borderBottom: '1px solid #000', paddingBottom: '4px', marginBottom: '2px' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '13px', letterSpacing: '0.3px' }}>
+                  ТОО &quot;АЗИЯЭНЕРГОАВТОМАТИКА&quot;
+                </div>
+              </div>
+              <div style={{ fontSize: '10.5px', lineHeight: 1.25 }}>
+                г. Алматы, ул. Бокейханова, 53а
+                <br />
+                тел.: 3862991, 2243162 факс: 3862994
+              </div>
             </div>
-          </div>
-          <div style={{ fontSize: '10.5px', lineHeight: 1.25 }}>
-            г. Алматы, ул. Бокейханова, 53а
-            <br />
-            тел.: 3862991, 2243162 факс: 3862994
+            {isApproved && (
+              <div style={{ border: '1.5px solid #047857', borderRadius: '5px', padding: '4px 8px', color: '#047857', fontSize: '9px', lineHeight: 1.25, textAlign: 'center', fontFamily: 'Arial, sans-serif', backgroundColor: '#fff', flexShrink: 0 }}>
+                <div style={{ fontWeight: 'bold', fontSize: '10px', letterSpacing: '0.5px' }}>ОДОБРЕНО</div>
+                <div>Быкаев К.Ж. (ЭЦП/система)</div>
+                <div>Дата: {orderDate}</div>
+              </div>
+            )}
           </div>
 
           {/* Заголовок */}
           <div style={{ fontWeight: 'bold', fontSize: '13px', marginTop: '6px', marginBottom: '4px' }}>
-            КОМАНДИРОВОЧНОЕ УДОСТОВЕРЕНИЕ &nbsp; № {trip.id}
+            КОМАНДИРОВОЧНОЕ УДОСТОВЕРЕНИЕ &nbsp; № {certNumber}
           </div>
 
           {/* Выдано */}
@@ -185,24 +196,14 @@ const PrintTripCertificate = forwardRef<HTMLDivElement, PrintTripCertificateProp
             Действительно по предъявлению паспорта
           </div>
 
-          {/* Подпись директора и факсимиле */}
-          <div style={{ position: 'relative', marginTop: '10px', paddingBottom: '4px' }}>
+          {/* Чистая строка подписи директора (без факсимиле) */}
+          <div style={{ marginTop: '12px', paddingBottom: '4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', fontWeight: 'bold' }}>
-              <span>Директор</span>
+              <span>Директор ___________________</span>
               <div style={{ flex: 1, backgroundColor: '#fff', padding: '3px 10px', textAlign: 'right' }}>
                 К.Ж. Быкаев
               </div>
             </div>
-
-            {isApproved && (
-              <div style={{ position: 'absolute', left: '42%', top: '-38px', opacity: 0.88, pointerEvents: 'none' }}>
-                <img
-                  src={DIRECTOR_STAMP_SIGNATURE_DATA_URI}
-                  alt="Печать и подпись директора"
-                  style={{ width: '96px', height: '96px' }}
-                />
-              </div>
-            )}
           </div>
         </div>
       </div>

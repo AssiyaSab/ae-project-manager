@@ -204,7 +204,10 @@ model BusinessTrip {
   budget              Float    // Итоговый плановый бюджет (для совместимости = totalBudget)
   projectId           Int?
   project             Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  status              String   @default("PENDING_BUDGET") // PENDING_BUDGET | PENDING_APPROVAL | APPROVED_FOR_PAYMENT | PAID | DOCS_SUBMITTED | REJECTED
+  status              String   @default("PENDING_APPROVAL") // PENDING_APPROVAL | APPROVED_BY_DIRECTOR | DOCS_READY | PAID | DOCS_SUBMITTED | REJECTED
+  orderNumber         String?  // Регистрационный номер приказа (вводит бухгалтерия, напр. 264-л/с)
+  certificateNumber   String?  // Номер командировочного удостоверения
+  approvedAt          DateTime? // Дата одобрения Директором
   paymentTaskId       Int?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

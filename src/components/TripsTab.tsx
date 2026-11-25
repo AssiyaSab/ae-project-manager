@@ -38,6 +38,14 @@ export default function TripsTab({ currentUser, projects, users }: any) {
 
   const [editingTrip, setEditingTrip] = useState<any>(null);
 
+  // Модальное окно «Принять в работу» (Бухгалтерия: номера приказа/удостоверения + корректировка бюджета)
+  const [inWorkTrip, setInWorkTrip] = useState<any>(null);
+  const [inWorkOrderNumber, setInWorkOrderNumber] = useState('');
+  const [inWorkCertificateNumber, setInWorkCertificateNumber] = useState('');
+  const [inWorkTransportCost, setInWorkTransportCost] = useState('');
+  const [inWorkAccommodationCost, setInWorkAccommodationCost] = useState('');
+  const [inWorkBudget, setInWorkBudget] = useState('');
+
   const tripPrintRef = useRef(null);
   const [activeTripForPrint, setActiveTripForPrint] = useState<any>(null);
   const handlePrintTrip = useReactToPrint({
@@ -490,11 +498,13 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                     <td style={{ padding: '10px' }}>
                       {(() => {
                         const badgeMap: Record<string, { label: string; bg: string; color: string }> = {
-                          PENDING_BUDGET: { label: '1. ПРОВЕРКА БЮДЖЕТА', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
-                          PENDING: { label: '1. ПРОВЕРКА БЮДЖЕТА', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
-                          PENDING_APPROVAL: { label: '2. ЖДЕТ ДИРЕКТОРА', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' },
-                          APPROVED_FOR_PAYMENT: { label: '3. К ОПЛАТЕ', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
-                          APPROVED: { label: '3. К ОПЛАТЕ', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
+                          PENDING_APPROVAL: { label: '1. НА СОГЛАСОВАНИИ (ДИРЕКТОР)', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
+                          PENDING_BUDGET: { label: '1. НА СОГЛАСОВАНИИ (ДИРЕКТОР)', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
+                          PENDING: { label: '1. НА СОГЛАСОВАНИИ (ДИРЕКТОР)', bg: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' },
+                          APPROVED_BY_DIRECTOR: { label: '2. ОДОБРЕНО (В БУХГАЛТЕРИИ)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' },
+                          DOCS_READY: { label: '3. ДОКУМЕНТЫ ГОТОВЫ (К ОПЛАТЕ)', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
+                          APPROVED_FOR_PAYMENT: { label: '3. ДОКУМЕНТЫ ГОТОВЫ (К ОПЛАТЕ)', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
+                          APPROVED: { label: '3. ДОКУМЕНТЫ ГОТОВЫ (К ОПЛАТЕ)', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' },
                           PAID: { label: '4. ОПЛАЧЕНО', bg: 'rgba(16, 185, 129, 0.2)', color: '#10b981' },
                           DOCS_SUBMITTED: { label: '5. ДОКУМЕНТЫ СДАНЫ', bg: 'rgba(20, 184, 166, 0.2)', color: '#2dd4bf' },
                           COMPLETED: { label: '5. ДОКУМЕНТЫ СДАНЫ', bg: 'rgba(20, 184, 166, 0.2)', color: '#2dd4bf' },
@@ -507,17 +517,22 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                           </span>
                         );
                       })()}
+                      {t.orderNumber && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                          Приказ №{t.orderNumber} {t.certificateNumber ? `• Уд. №${t.certificateNumber}` : ''}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '10px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
-                        <button
-                          onClick={() => generateTripPDF(t)}
-                          className="inline-btn"
-                          style={{ background: '#3b82f6', color: '#fff', fontSize: '0.75rem', padding: '4px 8px', whiteSpace: 'nowrap' }}
-                        >
-                          📄 Приказ (PDF)
-                        </button>
-                        {['APPROVED_FOR_PAYMENT', 'APPROVED', 'PAID', 'DOCS_SUBMITTED', 'COMPLETED'].includes(t.status) && (
+                      {['DOCS_READY', 'PAID', 'DOCS_SUBMITTED', 'APPROVED_FOR_PAYMENT', 'APPROVED', 'COMPLETED'].includes(t.status) ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', alignItems: 'flex-start' }}>
+                          <button
+                            onClick={() => generateTripPDF(t)}
+                            className="inline-btn"
+                            style={{ background: '#3b82f6', color: '#fff', fontSize: '0.75rem', padding: '4px 8px', whiteSpace: 'nowrap' }}
+                          >
+                            📄 Приказ (PDF)
+                          </button>
                           <button
                             onClick={() => generateTripCertificatePDF(t)}
                             className="inline-btn"
@@ -525,37 +540,25 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                           >
                             📄 Командировочное удостоверение (PDF)
                           </button>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                          ⏳ После оформления в бухгалтерии
+                        </span>
+                      )}
                     </td>
                     {canManageTrips && (
                       <td style={{ padding: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-                        {(t.status === 'PENDING_BUDGET' || t.status === 'PENDING') && isAccountingOrAdmin && (() => {
-                          const k = `trip_${t.id}_PENDING_APPROVAL`;
-                          const isL = loadingKey === k;
-                          const isC = confirmedKey === k;
-                          return (
-                            <button
-                              disabled={isL}
-                              onClick={() => updateTripStatus(t.id, 'PENDING_APPROVAL', k)}
-                              className="inline-btn"
-                              style={{ background: isC ? '#10b981' : '#8b5cf6', color: '#fff', opacity: isL ? 0.7 : 1 }}
-                            >
-                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '📤 Передать Директору'}
-                            </button>
-                          );
-                        })()}
-
                         {(t.status === 'PENDING_APPROVAL' || t.status === 'PENDING' || t.status === 'PENDING_BUDGET') && ['ADMIN', 'MANAGER'].includes(currentUser?.role) && (
                           <>
                             {(() => {
-                              const k = `trip_${t.id}_APPROVED_FOR_PAYMENT`;
+                              const k = `trip_${t.id}_APPROVED_BY_DIRECTOR`;
                               const isL = loadingKey === k;
                               const isC = confirmedKey === k;
                               return (
                                 <button
                                   disabled={isL}
-                                  onClick={() => updateTripStatus(t.id, 'APPROVED_FOR_PAYMENT', k)}
+                                  onClick={() => updateTripStatus(t.id, 'APPROVED_BY_DIRECTOR', k)}
                                   className="inline-btn"
                                   style={{ background: isC ? '#10b981' : 'rgba(16, 185, 129, 0.15)', color: isC ? '#fff' : '#10b981' }}
                                 >
@@ -574,7 +577,24 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                           </>
                         )}
 
-                        {(t.status === 'APPROVED_FOR_PAYMENT' || t.status === 'APPROVED') && isAccountingOrAdmin && (() => {
+                        {t.status === 'APPROVED_BY_DIRECTOR' && isAccountingOrAdmin && (
+                          <button
+                            onClick={() => {
+                              setInWorkTrip(t);
+                              setInWorkOrderNumber(t.orderNumber || `${t.id}-л/с`);
+                              setInWorkCertificateNumber(t.certificateNumber || String(t.id));
+                              setInWorkTransportCost(String(t.transportCost ?? 0));
+                              setInWorkAccommodationCost(String(t.accommodationCost ?? 0));
+                              setInWorkBudget(String(t.totalBudget > 0 ? t.totalBudget : t.budget || 0));
+                            }}
+                            className="inline-btn"
+                            style={{ background: '#8b5cf6', color: '#fff', fontWeight: 600 }}
+                          >
+                            ⚙️ Принять в работу
+                          </button>
+                        )}
+
+                        {(t.status === 'DOCS_READY' || t.status === 'APPROVED_FOR_PAYMENT' || t.status === 'APPROVED') && isAccountingOrAdmin && (() => {
                           const k = `trip_${t.id}_PAID`;
                           const isL = loadingKey === k;
                           const isC = confirmedKey === k;
@@ -769,6 +789,101 @@ export default function TripsTab({ currentUser, projects, users }: any) {
                 </button>
                 <button type="submit" className="btn-submit">
                   Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно «Принять в работу» (Бухгалтерия: номера документов + бюджет) */}
+      {inWorkTrip && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="form-card" style={{ width: '460px', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '6px' }}>⚙️ Принять командировку в работу #{inWorkTrip.id}</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '14px' }}>
+              {inWorkTrip.employee?.name} • {inWorkTrip.destination}
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const key = `trip_${inWorkTrip.id}_DOCS_READY`;
+                if (loadingKey === key) return;
+                setLoadingKey(key);
+                try {
+                  const res = await fetch('/api/trips', {
+                    method: 'PATCH',
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                      id: inWorkTrip.id,
+                      status: 'DOCS_READY',
+                      orderNumber: inWorkOrderNumber.trim(),
+                      certificateNumber: inWorkCertificateNumber.trim(),
+                      transportCost: Number(inWorkTransportCost) || 0,
+                      accommodationCost: Number(inWorkAccommodationCost) || 0,
+                      ...(inWorkBudget ? { totalBudget: Number(inWorkBudget) } : {}),
+                    }),
+                  });
+                  if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    showToast(err.error || 'Ошибка сохранения', 'error');
+                    return;
+                  }
+                  showToast('✅ Номера присвоены, PDF-документы доступны', 'success');
+                  setInWorkTrip(null);
+                  fetchData();
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setLoadingKey(null);
+                }
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Регистрационный номер приказа *
+                </label>
+                <input
+                  className="form-input"
+                  placeholder="Например: 264-л/с"
+                  value={inWorkOrderNumber}
+                  onChange={(e) => setInWorkOrderNumber(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Номер командировочного удостоверения *
+                </label>
+                <input
+                  className="form-input"
+                  placeholder="Например: 45"
+                  value={inWorkCertificateNumber}
+                  onChange={(e) => setInWorkCertificateNumber(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Проезд (₸)</label>
+                  <input className="form-input" type="number" min="0" value={inWorkTransportCost} onChange={(e) => setInWorkTransportCost(e.target.value)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Проживание (₸)</label>
+                  <input className="form-input" type="number" min="0" value={inWorkAccommodationCost} onChange={(e) => setInWorkAccommodationCost(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: '#fbbf24', marginBottom: '4px' }}>
+                  Итоговая сумма бюджета (₸)
+                </label>
+                <input className="form-input" type="number" min="0" value={inWorkBudget} onChange={(e) => setInWorkBudget(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button type="button" className="inline-btn" onClick={() => setInWorkTrip(null)}>Отмена</button>
+                <button type="submit" disabled={loadingKey === `trip_${inWorkTrip.id}_DOCS_READY`} className="btn-submit" style={{ background: '#8b5cf6' }}>
+                  {loadingKey === `trip_${inWorkTrip.id}_DOCS_READY` ? '⏳ Сохранение...' : '✅ Сохранить и открыть PDF'}
                 </button>
               </div>
             </form>

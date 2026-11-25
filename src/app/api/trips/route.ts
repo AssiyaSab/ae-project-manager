@@ -91,18 +91,18 @@ export async function POST(request: Request) {
         totalBudget: calc.totalBudget,
         budget: calc.totalBudget,
         projectId: projectId ? Number(projectId) : null,
-        status: 'PENDING_BUDGET',
+        status: 'PENDING_APPROVAL',
       },
       include: { employee: true, project: true }
     });
 
     try {
-      const recipients = await prisma.user.findMany({
-        where: { role: { in: ['CHIEF_ACCOUNTANT', 'ACCOUNTANT', 'ADMIN'] }, telegramId: { not: null } }
+      const approvers = await prisma.user.findMany({
+        where: { role: { in: ['ADMIN', 'MANAGER'] }, telegramId: { not: null } }
       });
       const { sendTelegramMessage } = await import('@/lib/telegram');
       
-      const message = `✈️ *Новая заявка на командировку #${trip.id} (Проверка бюджета)*\n\n` +
+      const message = `✈️ *Новая заявка на командировку #${trip.id}*\n\n` +
         `*Сотрудник:* ${trip.employee?.name || 'Система'}\n` +
         `*Пункт назначения:* ${trip.destination}\n` +
         `*Цель:* ${trip.purpose}\n` +
@@ -111,11 +111,18 @@ export async function POST(request: Request) {
         (calc.transportCost > 0 ? `*Проезд / билеты:* ${calc.transportCost.toLocaleString('ru-RU')} ₸\n` : '') +
         (calc.accommodationCost > 0 ? `*Проживание:* ${calc.accommodationCost.toLocaleString('ru-RU')} ₸\n` : '') +
         `*Итого к выдаче:* *${calc.totalBudget.toLocaleString('ru-RU')} ₸*\n\n` +
-        `⏳ Ожидает проверки бюджета бухгалтерией перед передачей на подпись Директору.`;
+        `👉 Согласовать командировку?`;
 
-      for (const r of recipients) {
+      const keyboard = {
+        inline_keyboard: [[
+          { text: 'Одобрить ✅', callback_data: `trip_approve_${trip.id}` },
+          { text: 'Отклонить ❌', callback_data: `trip_reject_${trip.id}` }
+        ]]
+      };
+
+      for (const r of approvers) {
         if (r.telegramId) {
-          await sendTelegramMessage(r.telegramId, message, { parse_mode: 'Markdown' });
+          await sendTelegramMessage(r.telegramId, message, { parse_mode: 'Markdown', reply_markup: keyboard });
         }
       }
     } catch (tgError) {
@@ -150,6 +157,8 @@ export async function PATCH(request: Request) {
       totalBudget,
       budget,
       projectId,
+      orderNumber,
+      certificateNumber,
     } = body;
     
     if (!id) {
@@ -163,6 +172,9 @@ export async function PATCH(request: Request) {
 
     const data: any = {};
     if (status !== undefined) data.status = status;
+    if (status === 'APPROVED_BY_DIRECTOR' && !existing.approvedAt) data.approvedAt = new Date();
+    if (orderNumber !== undefined) data.orderNumber = orderNumber ? String(orderNumber).trim() : null;
+    if (certificateNumber !== undefined) data.certificateNumber = certificateNumber ? String(certificateNumber).trim() : null;
     if (employeeId !== undefined) data.employeeId = Number(employeeId);
     if (destination !== undefined) data.destination = destination;
     if (purpose !== undefined) data.purpose = purpose;
@@ -247,7 +259,22 @@ export async function PATCH(request: Request) {
           }
         }
 
-        if (status === 'APPROVED_FOR_PAYMENT' || status === 'APPROVED') {
+        if (status === 'APPROVED_BY_DIRECTOR') {
+          const accs = await prisma.user.findMany({
+            where: { role: { in: ['ACCOUNTANT', 'CHIEF_ACCOUNTANT'] }, telegramId: { not: null } }
+          });
+          const msg = `✅ *Директор одобрил командировку #${trip.id}*\n\n` +
+            `*Сотрудник:* ${trip.employee?.name}\n` +
+            `*Маршрут:* ${trip.destination}\n` +
+            `*Даты:* с ${formatDate(trip.startDate)} по ${formatDate(trip.endDate)}\n` +
+            `*Бюджет:* ${(trip.totalBudget || trip.budget).toLocaleString('ru-RU')} ₸\n\n` +
+            `👉 Бухгалтерии: откройте раздел «Командировки» и нажмите *«⚙️ Принять в работу»* для присвоения номера приказа и удостоверения.`;
+          for (const a of accs) {
+            if (a.telegramId) await sendTelegramMessage(a.telegramId, msg, { parse_mode: 'Markdown' });
+          }
+        }
+
+        if (status === 'DOCS_READY' || status === 'APPROVED_FOR_PAYMENT' || status === 'APPROVED') {
           // Создаем задачу Главному бухгалтеру «Оплатить командировочные»
           const chiefAccs = await prisma.user.findMany({
             where: {

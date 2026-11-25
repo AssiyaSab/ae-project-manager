@@ -16,9 +16,19 @@ const PrintTripOrder = forwardRef<HTMLDivElement, PrintTripOrderProps>(({ trip }
   const creationDate = new Date(trip.createdAt);
   const monthsRu = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
   const formattedDate = `${creationDate.getDate()} ${monthsRu[creationDate.getMonth()]} ${creationDate.getFullYear()} года`;
+  const approvedDateStr = formatDate(trip.approvedAt || trip.createdAt);
+  const orderNum = trip.orderNumber || `${trip.id}-л/с`;
+  const isApproved = ['APPROVED_BY_DIRECTOR', 'DOCS_READY', 'PAID', 'DOCS_SUBMITTED', 'APPROVED_FOR_PAYMENT', 'APPROVED', 'COMPLETED'].includes(trip.status);
 
   return (
-    <div ref={ref} style={{ padding: '40px', fontFamily: '"Times New Roman", Times, serif', color: '#000', backgroundColor: '#fff', width: '210mm', minHeight: '297mm', boxSizing: 'border-box' }}>
+    <div ref={ref} style={{ padding: '40px', fontFamily: '"Times New Roman", Times, serif', color: '#000', backgroundColor: '#fff', width: '210mm', minHeight: '297mm', boxSizing: 'border-box', position: 'relative' }}>
+      {isApproved && (
+        <div style={{ position: 'absolute', top: '22px', right: '40px', border: '2px solid #047857', borderRadius: '6px', padding: '6px 12px', color: '#047857', fontSize: '10.5px', lineHeight: 1.3, textAlign: 'center', fontFamily: 'Arial, sans-serif' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '12px', letterSpacing: '1px' }}>ОДОБРЕНО</div>
+          <div>Быкаев К.Ж. (ЭЦП/система)</div>
+          <div>Дата: {approvedDateStr}</div>
+        </div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', textAlign: 'center', fontWeight: 'bold' }}>
         <div style={{ width: '45%' }}>
           <div>ТОО</div>
@@ -37,7 +47,7 @@ const PrintTripOrder = forwardRef<HTMLDivElement, PrintTripOrderProps>(({ trip }
       <hr style={{ borderTop: '1px solid #000', margin: '0 0 10px 0' }} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-        <div>{formattedDate} № {trip.id}-л/с</div>
+        <div>{formattedDate} № {orderNum}</div>
         <div>город Алматы</div>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -59,17 +69,11 @@ const PrintTripOrder = forwardRef<HTMLDivElement, PrintTripOrderProps>(({ trip }
         Срок командировки: {diffDays} {diffDays === 1 ? 'день' : (diffDays >= 2 && diffDays <= 4) ? 'дня' : 'дней'}.
       </div>
 
-      <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
-        <div style={{ fontWeight: 'bold' }}>Директор</div>
-        
-        {(trip.status === 'APPROVED' || trip.status === 'COMPLETED') && (
-          <div style={{ position: 'absolute', left: '30%', top: '-10px', opacity: 0.85 }}>
-            <img src="/images/signature.png" alt="Signature" style={{ width: '120px', height: '60px' }} />
-          </div>
-        )}
-
+      <div style={{ marginTop: '60px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontWeight: 'bold' }}>Директор ___________________</div>
         <div style={{ fontWeight: 'bold' }}>К.Ж. Быкаев</div>
       </div>
+      <div style={{ marginTop: '24px', fontWeight: 'bold' }}>М.П.</div>
     </div>
   );
 });

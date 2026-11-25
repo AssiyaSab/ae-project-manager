@@ -1214,7 +1214,7 @@ export async function handleIncomingBotMessage(
           totalBudget: calc.totalBudget,
           budget: calc.totalBudget,
           projectId: data.projectId > 0 ? Number(data.projectId) : null,
-          status: 'PENDING',
+          status: 'PENDING_APPROVAL',
         },
         include: { employee: true, project: true }
       });
@@ -1282,7 +1282,10 @@ export async function handleIncomingBotMessage(
 
     const trip = await prisma.businessTrip.update({
       where: { id: tripId },
-      data: { status: isApprove ? 'APPROVED_FOR_PAYMENT' : 'REJECTED' },
+      data: {
+        status: isApprove ? 'APPROVED_BY_DIRECTOR' : 'REJECTED',
+        ...(isApprove ? { approvedAt: new Date() } : {}),
+      },
       include: { employee: true, project: true }
     });
 
