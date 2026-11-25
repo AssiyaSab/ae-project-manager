@@ -118,8 +118,8 @@ export async function PATCH(request: Request) {
     }
 
     if (action === 'APPROVE') {
-      if (!['ADMIN', 'MANAGER'].includes(user.role)) {
-        return NextResponse.json({ error: 'Только Директор или Руководитель может утверждать счет' }, { status: 403 });
+      if (user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Только Директор может утверждать счет к оплате' }, { status: 403 });
       }
       if (invoice.amount >= 500000) {
         const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
@@ -192,8 +192,8 @@ export async function PATCH(request: Request) {
     }
 
     if (action === 'REJECT') {
-      if (!['ADMIN', 'MANAGER'].includes(user.role)) {
-        return NextResponse.json({ error: 'Недостаточно прав' }, { status: 403 });
+      if (user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Только Директор может отклонять счет' }, { status: 403 });
       }
       const updated = await prisma.purchaseInvoice.update({
         where: { id: invoice.id },

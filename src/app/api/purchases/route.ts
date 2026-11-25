@@ -65,21 +65,19 @@ export async function POST(request: Request) {
     
     // Начальный статус:
     // 1) Руководитель прикрепил счет сразу -> PENDING_PAYMENT_APPROVAL (напрямую Директору)
-    // 2) Руководитель без счета -> IN_PROCUREMENT (сразу в снабжение)
-    // 3) Остальные -> PENDING_APPROVAL (или PENDING_EXPENSE)
+    // 2) Обычная заявка на ТМЦ -> NEW (для взятия в работу снабжением)
+    // 3) Срочный подотчет -> PENDING_EXPENSE
     const isDirectInvoiceToDirector =
       requestType === 'INVOICE' &&
       user.role === 'MANAGER' &&
       Boolean(directToDirector || invoiceFileUrl);
-    const isDirectToSupply = requestType === 'INVOICE' && user.role === 'MANAGER' && !isDirectInvoiceToDirector;
+    const isDirectToSupply = false;
     const initialStatus =
       requestType === 'EXPENSE'
         ? 'PENDING_EXPENSE'
         : isDirectInvoiceToDirector
           ? 'PENDING_PAYMENT_APPROVAL'
-          : isDirectToSupply
-            ? 'IN_PROCUREMENT'
-            : 'PENDING_APPROVAL';
+          : 'NEW';
 
     // Привязка автора заявки к текущему верифицированному пользователю из сессии
     let finalRequesterId: number | null =
@@ -294,10 +292,33 @@ export async function PATCH(request: Request) {
       }
     }
 
-    // Security check: Only Chief Accountant or Admin can confirm payment
-    if ((status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') && status !== currentPurchase.status) {
-      if (!isChiefAccountantUser(user)) {
+    // Security check: Strict role enforcement per lifecycle stage
+    if (status && status !== currentPurchase.status) {
+      if ((status === 'IN_SUPPLY' || status === 'IN_PROCUREMENT') && ['NEW', 'PENDING_APPROVAL', 'PENDING'].includes(currentPurchase.status)) {
+        if (!['SUPPLY', 'ADMIN'].includes(user.role)) {
+          return NextResponse.json({ error: 'Только Снабженец или Директор может взять заявку в работу' }, { status: 403 });
+        }
+      }
+      if (status === 'PENDING_PAYMENT_APPROVAL' && !['SUPPLY', 'ADMIN'].includes(user.role)) {
+        return NextResponse.json({ error: 'Только Снабженец или Директор может передавать счет на утверждение' }, { status: 403 });
+      }
+      if (status === 'APPROVED_FOR_PAYMENT' && user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Только Директор имеет право утверждать счета к оплате' }, { status: 403 });
+      }
+      if (status === 'REJECTED' && currentPurchase.status === 'PENDING_PAYMENT_APPROVAL' && user.role !== 'ADMIN') {
+        return NextResponse.json({ error: 'Только Директор имеет право отклонять счет на утверждении' }, { status: 403 });
+      }
+      if ((status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') && !isChiefAccountantUser(user)) {
         return NextResponse.json({ error: 'Только Главный бухгалтер или Директор имеет право подтверждать оплату счетов' }, { status: 403 });
+      }
+      if (status === 'POA_ISSUED' && !['ACCOUNTANT', 'CHIEF_ACCOUNTANT', 'ADMIN'].includes(user.role)) {
+        return NextResponse.json({ error: 'Только Бухгалтерия или Директор может оформлять доверенность Д-1' }, { status: 403 });
+      }
+      if (status === 'IN_TRANSIT' && !['SUPPLY', 'ADMIN'].includes(user.role)) {
+        return NextResponse.json({ error: 'Только Снабженец или Директор может переводить в статус «Везем на склад»' }, { status: 403 });
+      }
+      if (status === 'DELIVERED' && !['WAREHOUSE', 'SUPPLY', 'ADMIN'].includes(user.role)) {
+        return NextResponse.json({ error: 'Только Кладовщик, Снабженец или Директор может принять ТМЦ на склад' }, { status: 403 });
       }
     }
 
@@ -325,7 +346,7 @@ export async function PATCH(request: Request) {
     if (deliveryNoteUrl !== undefined) data.deliveryNoteUrl = deliveryNoteUrl;
 
     // Автоматическая фиксация ответственных при смене статусов
-    if (status === 'IN_PROCUREMENT') {
+    if (status === 'IN_PROCUREMENT' || status === 'IN_SUPPLY') {
       data.supplyUserId = user.id || currentPurchase.supplyUserId;
     }
     if (status === 'APPROVED_FOR_PAYMENT') {
@@ -374,8 +395,8 @@ export async function PATCH(request: Request) {
     // Telegram-уведомления по цепочке жизненного цикла
     try {
       if (status && status !== currentPurchase.status) {
-        // 1. ГИП / Директор одобрил потребность -> Уведомляем Снабжение
-        if (status === 'IN_PROCUREMENT' || (currentPurchase.status === 'PENDING_APPROVAL' && status === 'APPROVED')) {
+        // 1. Взято в работу снабжением -> Уведомляем Снабжение и создаем задачу
+        if (status === 'IN_SUPPLY' || status === 'IN_PROCUREMENT' || (currentPurchase.status === 'PENDING_APPROVAL' && status === 'APPROVED')) {
           // Создаем или обновляем производственную задачу снабженцу в проекте
           await createOrUpdateSupplyTask(updated.id);
 
@@ -624,15 +645,20 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const existing = await prisma.purchaseRequest.findUnique({ where: { id: Number(id) } });
+    const existing = await prisma.purchaseRequest.findUnique({
+      where: { id: Number(id) },
+      include: { invoices: { select: { id: true } } },
+    });
     if (!existing) {
       return NextResponse.json({ error: 'Purchase not found' }, { status: 404 });
     }
 
-    const paidOrLaterStatuses = ['PAID_AND_ORDERED', 'PAID', 'PAID_EXPENSE', 'POA_ISSUED', 'IN_TRANSIT', 'DELIVERED'];
-    if (user.role === 'MANAGER' && paidOrLaterStatuses.includes(existing.status)) {
+    const canManagerDelete =
+      ['NEW', 'PENDING_APPROVAL', 'PENDING'].includes(existing.status) &&
+      (existing.invoices?.length || 0) === 0;
+    if (user.role === 'MANAGER' && !canManagerDelete) {
       return NextResponse.json(
-        { error: 'Руководитель может удалять только заявки до проведения оплаты' },
+        { error: 'Руководитель может удалять только заявки в начальном статусе (до взятия в работу и прикрепления счетов)' },
         { status: 403 }
       );
     }

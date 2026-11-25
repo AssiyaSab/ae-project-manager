@@ -685,14 +685,16 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     let color = '#fff';
 
     switch (status) {
+      case 'NEW':
       case 'PENDING_APPROVAL':
       case 'PENDING':
-        text = '1. ЖДЕТ ДИРЕКТОРА';
+        text = '1. НОВАЯ ЗАЯВКА';
         bg = 'rgba(245, 158, 11, 0.2)';
         color = '#f59e0b';
         break;
+      case 'IN_SUPPLY':
       case 'IN_PROCUREMENT':
-        text = '2. В СНАБЖЕНИИ';
+        text = '2. В РАБОТЕ (СНАБЖЕНИЕ)';
         bg = 'rgba(59, 130, 246, 0.2)';
         color = '#3b82f6';
         break;
@@ -1584,39 +1586,26 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                   <td style={{ padding: '12px 10px', verticalAlign: 'top' }}>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       
-                      {/* 1. GIP APPROVAL OF INITIAL NEED */}
-                      {(p.status === 'PENDING_APPROVAL' || p.status === 'PENDING') && isGipOrManager && (
-                        <>
-                          {(() => {
-                            const k = `pur_${p.id}_IN_PROCUREMENT`;
-                            const isL = loadingKey === k;
-                            const isC = confirmedKey === k;
-                            return (
-                              <button
-                                disabled={isL}
-                                onClick={() => updatePurchaseStatus(p.id, 'IN_PROCUREMENT', {}, k)}
-                                className="inline-btn"
-                                style={{ background: '#10b981', color: '#fff', opacity: isL ? 0.7 : 1 }}
-                                title="Одобрить потребность и передать в снабжение"
-                              >
-                                {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ В снабжение'}
-                              </button>
-                            );
-                          })()}
+                      {/* 1. SUPPLY: TAKE NEW PURCHASE INTO WORK */}
+                      {(['NEW', 'PENDING_APPROVAL', 'PENDING'].includes(p.status)) && isSupply && (() => {
+                        const k = `pur_${p.id}_IN_SUPPLY`;
+                        const isL = loadingKey === k;
+                        const isC = confirmedKey === k;
+                        return (
                           <button
-                            disabled={loadingKey === `pur_${p.id}_REJECTED`}
-                            onClick={() => updatePurchaseStatus(p.id, 'REJECTED', {}, `pur_${p.id}_REJECTED`)}
+                            disabled={isL}
+                            onClick={() => updatePurchaseStatus(p.id, 'IN_SUPPLY', {}, k)}
                             className="inline-btn"
-                            style={{ background: '#ef4444', color: '#fff' }}
-                            title="Отклонить заявку"
+                            style={{ background: '#10b981', color: '#fff', opacity: isL ? 0.7 : 1 }}
+                            title="Взять заявку в работу снабжения"
                           >
-                            {loadingKey === `pur_${p.id}_REJECTED` ? '⏳...' : '❌'}
+                            {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '⚙️ Взять в работу'}
                           </button>
-                        </>
-                      )}
+                        );
+                      })()}
 
-                      {/* 2. SUPPLY ACTION: PROCESS INVOICE & MULTI-INVOICE */}
-                      {(p.status === 'IN_PROCUREMENT' || p.status === 'PENDING_APPROVAL' || p.status === 'PENDING_PAYMENT_APPROVAL' || p.status === 'APPROVED') && isSupply && (
+                      {/* 2. SUPPLY ACTION: PROCESS INVOICE & MULTI-INVOICE (ONLY IN_SUPPLY / IN_PROCUREMENT) */}
+                      {(p.status === 'IN_SUPPLY' || p.status === 'IN_PROCUREMENT') && isSupply && (
                         <>
                           <button 
                             onClick={() => openSupplyModal(p)} 
@@ -1639,8 +1628,8 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         </>
                       )}
 
-                      {/* 3. GIP APPROVAL OF INVOICE PRICE */}
-                      {p.status === 'PENDING_PAYMENT_APPROVAL' && isGipOrManager && (
+                      {/* 3. DIRECTOR (ADMIN ONLY) APPROVAL OF INVOICE */}
+                      {p.status === 'PENDING_PAYMENT_APPROVAL' && role === 'ADMIN' && (
                         <>
                           {(() => {
                             const k = `pur_${p.id}_APPROVED_FOR_PAYMENT`;
@@ -1654,24 +1643,24 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                                 style={{ background: '#10b981', color: '#fff', opacity: isL ? 0.7 : 1 }}
                                 title="Утвердить сумму счета и передать на оплату в бухгалтерию"
                               >
-                                {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ Утвердить к оплате'}
+                                {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '✅ Утвердить счет'}
                               </button>
                             );
                           })()}
                           <button
-                            disabled={loadingKey === `pur_${p.id}_RESUBMIT`}
-                            onClick={() => updatePurchaseStatus(p.id, 'IN_PROCUREMENT', {}, `pur_${p.id}_RESUBMIT`)}
+                            disabled={loadingKey === `pur_${p.id}_REJECTED`}
+                            onClick={() => updatePurchaseStatus(p.id, 'REJECTED', {}, `pur_${p.id}_REJECTED`)}
                             className="inline-btn"
-                            style={{ background: '#f59e0b', color: '#fff' }}
-                            title="Вернуть снабженцу на пересогласование цены"
+                            style={{ background: '#ef4444', color: '#fff' }}
+                            title="Отклонить счет"
                           >
-                            {loadingKey === `pur_${p.id}_RESUBMIT` ? '⏳ Сохранение...' : '↩️ Пересогласовать'}
+                            {loadingKey === `pur_${p.id}_REJECTED` ? '⏳...' : '❌ Отклонить'}
                           </button>
                         </>
                       )}
 
-                      {/* 4. CHIEF ACCOUNTANT PAYMENT ACTION */}
-                      {(p.status === 'APPROVED_FOR_PAYMENT' || p.status === 'APPROVED') && (
+                      {/* 4. CHIEF ACCOUNTANT PAYMENT ACTION (STRICTLY AFTER DIRECTOR APPROVAL) */}
+                      {p.status === 'APPROVED_FOR_PAYMENT' && (
                         isChiefAccountant ? (() => {
                           const k = `pur_${p.id}_PAID_AND_ORDERED`;
                           const isL = loadingKey === k;
@@ -1687,14 +1676,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                               {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '💳 Подтвердить оплату'}
                             </button>
                           );
-                        })() : isAccountant ? (
-                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>
-                            ⏳ Ждет оплаты Главбухом
-                          </span>
-                        ) : null
+                        })() : null
                       )}
 
-                      {/* 4.5 ACCOUNTANT: ISSUE POA (ДОВЕРЕННОСТЬ Д-1) */}
+                      {/* 4.5 ACCOUNTANT: ISSUE POA (ДОВЕРЕННОСТЬ Д-1) ONLY AFTER PAYMENT */}
                       {(p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && isAccountant && (
                         <button
                           onClick={() => openPoaModal(p)}
@@ -1702,7 +1687,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                           style={{ background: '#8b5cf6', color: '#fff', fontWeight: 600 }}
                           title="Оформить доверенность формы Д-1 для получения ТМЦ"
                         >
-                          📜 Внести доверенность
+                          📑 Доверенность Д-1
                         </button>
                       )}
                       {p.status === 'POA_ISSUED' && isAccountant && (
@@ -1712,12 +1697,12 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                           style={{ background: 'rgba(139, 92, 246, 0.18)', color: '#c4b5fd', fontSize: '0.75rem' }}
                           title="Редактировать данные доверенности Д-1"
                         >
-                          📜 Ред. Д-1
+                          📑 Ред. Д-1
                         </button>
                       )}
 
                       {/* 5. EXPENSE APPROVAL & PAYMENT */}
-                      {p.status === 'PENDING_EXPENSE' && isGipOrManager && (
+                      {p.status === 'PENDING_EXPENSE' && role === 'ADMIN' && (
                         <>
                           {(() => {
                             const k = `pur_${p.id}_APPROVED_EXPENSE`;
@@ -1746,31 +1731,25 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         </>
                       )}
 
-                      {p.status === 'APPROVED_EXPENSE' && (
-                        isChiefAccountant ? (() => {
-                          const k = `pur_${p.id}_PAID_EXPENSE`;
-                          const isL = loadingKey === k;
-                          const isC = confirmedKey === k;
-                          return (
-                            <button
-                              disabled={isL}
-                              onClick={() => updatePurchaseStatus(p.id, 'PAID_EXPENSE', {}, k)}
-                              className="inline-btn"
-                              style={{ background: '#10b981', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
-                              title="Главный бухгалтер: выплатить подотчет"
-                            >
-                              {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '💳 Выплатить'}
-                            </button>
-                          );
-                        })() : isAccountant ? (
-                          <span style={{ fontSize: '0.75rem', color: '#f59e0b', fontStyle: 'italic', alignSelf: 'center' }}>
-                            ⏳ К выплате (Главбух)
-                          </span>
-                        ) : null
-                      )}
+                      {p.status === 'APPROVED_EXPENSE' && isChiefAccountant && (() => {
+                        const k = `pur_${p.id}_PAID_EXPENSE`;
+                        const isL = loadingKey === k;
+                        const isC = confirmedKey === k;
+                        return (
+                          <button
+                            disabled={isL}
+                            onClick={() => updatePurchaseStatus(p.id, 'PAID_EXPENSE', {}, k)}
+                            className="inline-btn"
+                            style={{ background: '#10b981', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
+                            title="Главный бухгалтер: выплатить подотчет"
+                          >
+                            {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '💳 Выплатить'}
+                          </button>
+                        );
+                      })()}
 
-                      {/* 6. SUPPLY: PICKED UP AT SUPPLIER / IN TRANSIT */}
-                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isSupply || isGipOrManager) && (() => {
+                      {/* 6. SUPPLY: PICKED UP AT SUPPLIER / IN TRANSIT (ON PAID_AND_ORDERED / POA_ISSUED) */}
+                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && isSupply && (() => {
                         const k = `pur_${p.id}_IN_TRANSIT`;
                         const isL = loadingKey === k;
                         const isC = confirmedKey === k;
@@ -1787,8 +1766,8 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         );
                       })()}
 
-                      {/* 7. WAREHOUSE: RECEIVE AT WAREHOUSE WITH DELIVERY NOTE */}
-                      {(p.status === 'IN_TRANSIT' || p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && (isWarehouse || isGipOrManager) && (
+                      {/* 7. WAREHOUSE / SUPPLY: RECEIVE AT WAREHOUSE ONLY ON IN_TRANSIT */}
+                      {p.status === 'IN_TRANSIT' && (isWarehouse || isSupply) && (
                         <button
                           onClick={() => {
                             setDeliveryModalPurchase(p);
@@ -1796,21 +1775,21 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                           }}
                           className="inline-btn"
                           style={{ background: '#14b8a6', color: '#fff', fontWeight: 600 }}
-                          title="Кладовщик проверил и принял ТМЦ на склад (с загрузкой накладной)"
+                          title="Принять ТМЦ на склад (с загрузкой накладной)"
                         >
-                          📦 Принять на склад
+                          📥 Принято на склад
                         </button>
                       )}
 
-                      {/* 8. ADMIN / MANAGER CONTROLS */}
-                      {isGipOrManager && (
+                      {/* 8. ADMIN & MANAGER CONTROLS */}
+                      {role === 'ADMIN' && (
                         <button onClick={() => setEditingPurchase(p)} className="inline-btn" style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }} title="Редактировать заявку">
                           ✏️
                         </button>
                       )}
-                      {(role === 'ADMIN' || (role === 'MANAGER' && !['PAID_AND_ORDERED', 'PAID', 'PAID_EXPENSE', 'POA_ISSUED', 'IN_TRANSIT', 'DELIVERED'].includes(p.status))) && (
+                      {(role === 'ADMIN' || (role === 'MANAGER' && ['NEW', 'PENDING_APPROVAL', 'PENDING'].includes(p.status) && (p.invoices?.length || 0) === 0)) && (
                         <button onClick={() => handleDeletePurchase(p.id)} className="inline-btn" style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }} title="Удалить заявку">
-                          🗑️
+                          🗑️ Удалить
                         </button>
                       )}
 
@@ -1826,7 +1805,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         <div style={{ marginBottom: '14px' }}>
                           <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '8px', color: '#93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>📋 Позиции спецификации ({p.items.length})</span>
-                            {isSupply && (
+                            {isSupply && (p.status === 'IN_SUPPLY' || p.status === 'IN_PROCUREMENT') && (
                               <button
                                 type="button"
                                 onClick={() => openMultiInvoiceModal(p)}
@@ -1864,7 +1843,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                                     )}
                                   </td>
                                   <td style={{ padding: '6px 8px', textAlign: 'right' }}>
-                                    {it.sourceType === 'PENDING' && (isSupply || isWarehouse || isGipOrManager) && (
+                                    {it.sourceType === 'PENDING' && (p.status === 'IN_SUPPLY' || p.status === 'IN_PROCUREMENT') && (isSupply || isWarehouse) && (
                                       <button
                                         type="button"
                                         disabled={loadingKey === `item_stock_${it.id}`}
@@ -1905,15 +1884,25 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                                   <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', background: inv.status === 'PAID' ? 'rgba(16,185,129,0.2)' : inv.status === 'APPROVED_FOR_PAYMENT' ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)', color: inv.status === 'PAID' ? '#10b981' : inv.status === 'APPROVED_FOR_PAYMENT' ? '#60a5fa' : '#f59e0b' }}>
                                     {inv.status === 'PAID' ? 'ОПЛАЧЕН' : inv.status === 'APPROVED_FOR_PAYMENT' ? 'УТВЕРЖДЕН' : inv.status === 'REJECTED' ? 'ОТКЛОНЕН' : 'ЖДЕТ ДИРЕКТОРА'}
                                   </span>
-                                  {inv.status === 'PENDING_APPROVAL' && isGipOrManager && (
-                                    <button
-                                      disabled={loadingKey === `inv_${inv.id}_APPROVE`}
-                                      onClick={() => handleMultiInvoiceAction(inv.id, 'APPROVE', inv.amount)}
-                                      className="inline-btn"
-                                      style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', padding: '3px 8px' }}
-                                    >
-                                      {loadingKey === `inv_${inv.id}_APPROVE` ? '⏳...' : '✅ Утвердить'}
-                                    </button>
+                                  {inv.status === 'PENDING_APPROVAL' && role === 'ADMIN' && (
+                                    <>
+                                      <button
+                                        disabled={loadingKey === `inv_${inv.id}_APPROVE`}
+                                        onClick={() => handleMultiInvoiceAction(inv.id, 'APPROVE', inv.amount)}
+                                        className="inline-btn"
+                                        style={{ background: '#10b981', color: '#fff', fontSize: '0.72rem', padding: '3px 8px' }}
+                                      >
+                                        {loadingKey === `inv_${inv.id}_APPROVE` ? '⏳...' : '✅ Утвердить счет'}
+                                      </button>
+                                      <button
+                                        disabled={loadingKey === `inv_${inv.id}_REJECT`}
+                                        onClick={() => handleMultiInvoiceAction(inv.id, 'REJECT', inv.amount)}
+                                        className="inline-btn"
+                                        style={{ background: '#ef4444', color: '#fff', fontSize: '0.72rem', padding: '3px 8px' }}
+                                      >
+                                        {loadingKey === `inv_${inv.id}_REJECT` ? '⏳...' : '❌ Отклонить'}
+                                      </button>
+                                    </>
                                   )}
                                   {inv.status === 'APPROVED_FOR_PAYMENT' && isChiefAccountant && (
                                     <button
