@@ -69,6 +69,7 @@ export default function Home() {
   const { showToast } = useToast();
   const knownTaskIdsRef = useRef<Set<number> | null>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'forms' | 'alerts' | 'admin' | 'purchases' | 'trips' | 'tools' | 'accounting' | 'my-tasks' | 'sales'>('dashboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [highlightPurchaseId, setHighlightPurchaseId] = useState<number | null>(null);
   const [estimateProject, setEstimateProject] = useState<{ id: number; name: string } | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -1016,90 +1017,78 @@ export default function Home() {
               }} 
             />
           </div>
-          <nav className="dashboard-nav" style={{ flexWrap: 'wrap', flex: '1 1 auto' }}>
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
-              <button 
-                className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
-                onClick={() => setActiveTab('dashboard')}
-              >
-                📊 Дашборд
-              </button>
-            )}
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'MANAGER' || currentUser?.role === 'CHIEF_ACCOUNTANT') && (
-              <>
-                <button 
-                  className={`nav-btn ${activeTab === 'forms' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('forms')}
-                >
-                  ➕ Добавить
-                </button>
-                <button 
-                  className={`nav-btn ${activeTab === 'alerts' ? 'active' : ''}`}
-                  onClick={() => {
-                    setActiveTab('alerts');
-                    refreshData();
-                  }}
-                >
-                  ⚠️ Алерты ({alerts.filter(a => a.status === 'ACTIVE').length})
-                </button>
-              </>
-            )}
+          {(() => {
+            const role = currentUser?.role;
+            const navItems: { id: typeof activeTab; label: string; refresh?: boolean }[] = [];
+            if (['ADMIN', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT', 'MANAGER', 'SUPPLY'].includes(role || '')) {
+              navItems.push({ id: 'dashboard', label: '📊 Дашборд' });
+            }
+            if (['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT'].includes(role || '')) {
+              navItems.push({ id: 'forms', label: '➕ Добавить' });
+              navItems.push({ id: 'alerts', label: `⚠️ Алерты (${alerts.filter(a => a.status === 'ACTIVE').length})`, refresh: true });
+            }
+            if (['ENGINEER', 'ASSEMBLER', 'ACCOUNTANT', 'CHIEF_ACCOUNTANT'].includes(role || '')) {
+              navItems.push({ id: 'my-tasks', label: '📋 Мои задачи' });
+            }
+            navItems.push({ id: 'purchases', label: '🛒 Закупки ТМЦ' });
+            navItems.push({ id: 'sales', label: '💼 Продажи' });
+            navItems.push({ id: 'trips', label: '✈️ Командировки' });
+            navItems.push({ id: 'tools', label: '📦 Инструменты' });
+            if (['ADMIN', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT', 'MANAGER', 'SUPPLY'].includes(role || '')) {
+              navItems.push({ id: 'accounting', label: '📊 Бухгалтерия' });
+            }
+            if (role === 'ADMIN') {
+              navItems.push({ id: 'admin', label: '⚙️ Админка', refresh: true });
+            }
 
-            {(currentUser?.role === 'ENGINEER' || currentUser?.role === 'ASSEMBLER' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'CHIEF_ACCOUNTANT') && (
-              <button 
-                className={`nav-btn ${activeTab === 'my-tasks' ? 'active' : ''}`}
-                onClick={() => setActiveTab('my-tasks')}
-              >
-                📋 Мои задачи
-              </button>
-            )}
-            
-            <button 
-              className={`nav-btn ${activeTab === 'purchases' ? 'active' : ''}`}
-              onClick={() => setActiveTab('purchases')}
-            >
-              🛒 Закупки ТМЦ
-            </button>
-            <button 
-              className={`nav-btn ${activeTab === 'sales' ? 'active' : ''}`}
-              onClick={() => setActiveTab('sales')}
-            >
-              💼 Продажи
-            </button>
-            <button 
-              className={`nav-btn ${activeTab === 'trips' ? 'active' : ''}`}
-              onClick={() => setActiveTab('trips')}
-            >
-              ✈️ Командировки
-            </button>
-            <button 
-              className={`nav-btn ${activeTab === 'tools' ? 'active' : ''}`}
-              onClick={() => setActiveTab('tools')}
-            >
-              📦 Инструменты
-            </button>
-            
-            {(currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || currentUser?.role === 'ACCOUNTANT' || currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPPLY') && (
-              <button 
-                className={`nav-btn ${activeTab === 'accounting' ? 'active' : ''}`}
-                onClick={() => setActiveTab('accounting')}
-              >
-                📊 Бухгалтерия
-              </button>
-            )}
-            
-            {currentUser?.role === 'ADMIN' && (
-              <button 
-                className={`nav-btn ${activeTab === 'admin' ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveTab('admin');
-                  refreshData();
-                }}
-              >
-                ⚙️ Админка
-              </button>
-            )}
-          </nav>
+            const activeItem = navItems.find((it) => it.id === activeTab) || navItems[0];
+            const selectTab = (item: { id: typeof activeTab; refresh?: boolean }) => {
+              setActiveTab(item.id);
+              setMobileMenuOpen(false);
+              if (item.refresh) refreshData();
+            };
+
+            return (
+              <>
+                <nav className="dashboard-nav" style={{ flexWrap: 'wrap', flex: '1 1 auto' }}>
+                  {navItems.map((item) => (
+                    <button
+                      key={item.id}
+                      className={`nav-btn ${activeTab === item.id ? 'active' : ''}`}
+                      onClick={() => selectTab(item)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+
+                <div className="mobile-nav-wrapper">
+                  <button
+                    type="button"
+                    className="mobile-menu-toggle"
+                    onClick={() => setMobileMenuOpen((v) => !v)}
+                  >
+                    <span>☰ {activeItem?.label || 'Меню разделов'}</span>
+                    <span>{mobileMenuOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {mobileMenuOpen && (
+                    <div className="mobile-nav-dropdown">
+                      {navItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`mobile-nav-item ${activeTab === item.id ? 'active' : ''}`}
+                          onClick={() => selectTab(item)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
           
           {currentUser && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-secondary)', fontSize: '13px', marginLeft: 'auto', flexShrink: 0, whiteSpace: 'nowrap' }}>
