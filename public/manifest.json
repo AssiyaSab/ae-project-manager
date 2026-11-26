@@ -1,0 +1,10 @@
+{
+  "name": "AE Project Manager",
+  "short_name": "AE Manager",
+  "description": "Система управления проектами, закупками ТМЦ и командировками ТОО «АзияЭнергоАвтоматика»",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any"
+}

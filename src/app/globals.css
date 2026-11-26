@@ -725,3 +725,113 @@ body {
   color: #0f172a;
 }
 
+/* Mobile & Small Screen Adaptation */
+@media (max-width: 768px) {
+  html,
+  body {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .dashboard-panel {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  .dashboard-header {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+
+  .dashboard-nav {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    justify-content: flex-start !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    gap: 6px !important;
+  }
+
+  .dashboard-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 8px 12px !important;
+    font-size: 0.82rem !important;
+  }
+
+  .dashboard-content {
+    padding: 10px !important;
+  }
+
+  .stats-grid,
+  .projects-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .card,
+  .project-card,
+  .stat-card {
+    padding: 14px !important;
+    max-width: 100%;
+  }
+
+  .card-title {
+    font-size: 1.05rem !important;
+  }
+
+  .form-card {
+    width: 94vw !important;
+    max-width: 94vw !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    padding: 16px !important;
+  }
+
+  .form-input,
+  .form-select,
+  .form-textarea {
+    font-size: 16px !important;
+    min-height: 42px;
+  }
+
+  .inline-btn {
+    min-height: 36px;
+    padding: 6px 10px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .btn-submit {
+    min-height: 44px;
+    font-size: 0.95rem !important;
+    width: 100%;
+  }
+
+  .date-picker-wrapper,
+  .date-picker-wrapper .form-input,
+  .react-datepicker-wrapper {
+    width: 100% !important;
+  }
+
+  table {
+    font-size: 0.8rem !important;
+  }
+
+  table th,
+  table td {
+    padding: 8px 6px !important;
+  }
+
+  div[style*="overflowX"] {
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+}
+

@@ -1,10 +1,18 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ToastProvider } from '@/components/ToastProvider';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: '#0f172a',
+};
 
 export const metadata: Metadata = {
   title: 'AE Project Manager | АзияЭнергоАвтоматика',
   description: 'Система управления инженерными проектами ТОО «АзияЭнергоАвтоматика» с Telegram и ИИ интеграцией.',
+  manifest: '/manifest.json',
 };
 
 export default function RootLayout({
