@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { ru } from 'date-fns/locale';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, formatDateTime } from '@/lib/formatters';
 import { useReactToPrint } from 'react-to-print';
 import PrintPurchaseRequest from './PrintPurchaseRequest';
 import { useToast } from './ToastProvider';
 import { uploadFileCompressed, compressImageIfNeeded } from '@/lib/imageCompression';
 import FilePreviewModal, { formatTelegramOrFileUrl } from './FilePreviewModal';
+import WarehousePurchasesView from './WarehousePurchasesView';
 
 export default function PurchasesTab({ currentUser, projects, users, highlightPurchaseId }: any) {
   const { showToast } = useToast();
@@ -38,6 +39,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const [purchaseFileUrl, setPurchaseFileUrl] = useState('');
   const [directToDirector, setDirectToDirector] = useState(false);
   const [directInvoiceFileUrl, setDirectInvoiceFileUrl] = useState('');
+  const [isFirstTimeSupplier, setIsFirstTimeSupplier] = useState(false);
+  const [supplierEdoAddress, setSupplierEdoAddress] = useState('');
+  const [poaEmployeeName, setPoaEmployeeName] = useState('');
+  const [poaDeliveryMethod, setPoaDeliveryMethod] = useState<'STANDARD' | 'EDO'>('STANDARD');
   const [purchaseItems, setPurchaseItems] = useState<{ name: string; quantity: number; unit: string; price?: number }[]>([]);
   const [isParsingSpec, setIsParsingSpec] = useState(false);
   const [parseProgress, setParseProgress] = useState('');
@@ -61,6 +66,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const [supplyComment, setSupplyComment] = useState('');
   const [supplyInvoiceFileUrl, setSupplyInvoiceFileUrl] = useState('');
   const [supplyInvoiceFile, setSupplyInvoiceFile] = useState<File | null>(null);
+  const [supplyFirstTime, setSupplyFirstTime] = useState(false);
+  const [supplyEdoAddress, setSupplyEdoAddress] = useState('');
+  const [supplyPoaEmployee, setSupplyPoaEmployee] = useState('');
+  const [supplyPoaMethod, setSupplyPoaMethod] = useState<'STANDARD' | 'EDO'>('STANDARD');
   const [isParsingInvoice, setIsParsingInvoice] = useState(false);
   const supplyFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,9 +93,13 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const [multiInvFileUrl, setMultiInvFileUrl] = useState('');
   const [multiInvItemIds, setMultiInvItemIds] = useState<number[]>([]);
 
-  // Warehouse Delivery Note Modal State
+  // Warehouse Delivery Note & In-Transit Modals State
   const [deliveryModalPurchase, setDeliveryModalPurchase] = useState<any>(null);
   const [deliveryNoteUrl, setDeliveryNoteUrl] = useState('');
+  const [deliveryWaybillNumber, setDeliveryWaybillNumber] = useState('');
+  const [deliveryItemQtys, setDeliveryItemQtys] = useState<Record<number, string>>({});
+  const [inTransitModalPurchase, setInTransitModalPurchase] = useState<any>(null);
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
   const [previewFile, setPreviewFile] = useState<{ url: string; title: string; approvalStamp?: { approvedBy: string; date?: string; projectName?: string } | null } | null>(null);
 
   // Print Ref
@@ -151,6 +164,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
           fileUrl: purchaseFileUrl,
           directToDirector: role === 'MANAGER' && purchaseType === 'INVOICE' && directToDirector,
           invoiceFileUrl: role === 'MANAGER' && purchaseType === 'INVOICE' && directToDirector ? directInvoiceFileUrl : undefined,
+          isFirstTimeSupplier,
+          supplierEdoAddress: isFirstTimeSupplier ? supplierEdoAddress : undefined,
+          poaEmployeeName: poaEmployeeName || undefined,
+          poaDeliveryMethod,
           requesterId: currentUser?.id && currentUser.id > 0 && currentUser.id !== 999 ? currentUser.id : undefined,
           items: purchaseItems.filter(item => item.name.trim().length > 0)
         })
@@ -166,6 +183,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
       setPurchaseFileUrl('');
       setDirectToDirector(false);
       setDirectInvoiceFileUrl('');
+      setIsFirstTimeSupplier(false);
+      setSupplierEdoAddress('');
+      setPoaEmployeeName('');
+      setPoaDeliveryMethod('STANDARD');
       setPurchaseItems([]);
       showToast('✅ Заявка успешно создана', 'success');
       setUploadedFiles([]);
@@ -356,6 +377,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const openSupplyModal = (p: any) => {
     setSupplyModalPurchase(p);
     setSupplySupplierName(p.supplierName || '');
+    setSupplyFirstTime(Boolean(p.isFirstTimeSupplier));
+    setSupplyEdoAddress(p.supplierEdoAddress || '');
+    setSupplyPoaEmployee(p.poaEmployeeName || '');
+    setSupplyPoaMethod(p.poaDeliveryMethod === 'EDO' ? 'EDO' : 'STANDARD');
     setSupplyInvoiceNumber(p.invoiceNumber || '');
     setSupplyInvoiceDate(p.invoiceDate ? p.invoiceDate.split('T')[0] : '');
     setSupplyAmount(p.amount ? String(p.amount) : '');
@@ -437,6 +462,10 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     try {
       await updatePurchaseStatus(supplyModalPurchase.id, targetStatus, {
         supplierName: supplySupplierName,
+        isFirstTimeSupplier: supplyFirstTime,
+        supplierEdoAddress: supplyFirstTime ? supplyEdoAddress : null,
+        poaEmployeeName: supplyPoaEmployee || null,
+        poaDeliveryMethod: supplyPoaMethod,
         invoiceNumber: supplyInvoiceNumber,
         invoiceDate: supplyInvoiceDate || null,
         amount: Number(supplyAmount) || 0,
@@ -648,17 +677,59 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
     }
   };
 
+  const openDeliveryModal = (p: any) => {
+    setDeliveryModalPurchase(p);
+    setDeliveryNoteUrl('');
+    setDeliveryWaybillNumber('');
+    const init: Record<number, string> = {};
+    for (const it of p.items || []) {
+      const rem = Math.max(0, (Number(it.quantity) || 0) - (Number(it.deliveredQty) || 0));
+      init[it.id] = String(rem);
+    }
+    setDeliveryItemQtys(init);
+  };
+
   const handleDeliveryConfirm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deliveryModalPurchase) return;
-    await updatePurchaseStatus(
-      deliveryModalPurchase.id,
-      'DELIVERED',
-      { deliveryNoteUrl: deliveryNoteUrl.trim() || null },
-      `pur_${deliveryModalPurchase.id}_DELIVERED`
-    );
-    setDeliveryModalPurchase(null);
-    setDeliveryNoteUrl('');
+    const key = `pur_${deliveryModalPurchase.id}_RECEIVE_DELIVERY`;
+    if (loadingKey === key) return;
+    setLoadingKey(key);
+    try {
+      const receivedItems = (deliveryModalPurchase.items || []).map((it: any) => ({
+        itemId: it.id,
+        qtyReceived: Math.max(0, Number(deliveryItemQtys[it.id]) || 0),
+      }));
+      const res = await fetch('/api/purchases', {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: deliveryModalPurchase.id,
+          action: 'RECEIVE_DELIVERY',
+          waybillNumber: deliveryWaybillNumber.trim() || null,
+          fileUrl: deliveryNoteUrl.trim() || null,
+          receivedItems,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(data.error || 'Ошибка при оформлении приемки', 'error');
+        return;
+      }
+      showToast(
+        data.status === 'PARTIALLY_DELIVERED'
+          ? '📦 Принято частично (ожидается довоз)'
+          : '✅ Поставка полностью принята на склад',
+        'success'
+      );
+      setDeliveryModalPurchase(null);
+      setDeliveryNoteUrl('');
+      fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingKey(null);
+    }
   };
 
   const handleDeletePurchase = async (id: number) => {
@@ -721,12 +792,17 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
         color = '#a78bfa';
         break;
       case 'IN_TRANSIT':
-        text = '6. ГРУЗ В ПУТИ / ВЕЗЕМ В ЦЕХ';
+        text = '6. В ПУТИ';
         bg = 'rgba(59, 130, 246, 0.2)';
         color = '#60a5fa';
         break;
+      case 'PARTIALLY_DELIVERED':
+        text = '6. ЧАСТИЧНО НА СКЛАДЕ';
+        bg = 'rgba(245, 158, 11, 0.2)';
+        color = '#fbbf24';
+        break;
       case 'DELIVERED':
-        text = '7. ДОСТАВЛЕНО / НА СКЛАДЕ';
+        text = '7. ПРИНЯТО НА СКЛАД';
         bg = 'rgba(20, 184, 166, 0.2)';
         color = '#2dd4bf';
         break;
@@ -812,6 +888,16 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const isChiefAccountant = currentUser?.role === 'ADMIN' || currentUser?.role === 'CHIEF_ACCOUNTANT' || (currentUser?.role === 'ACCOUNTANT' && currentUser?.title?.toLowerCase().includes('главн'));
   const isAccountant = ['ACCOUNTANT', 'CHIEF_ACCOUNTANT', 'ADMIN'].includes(role);
   const isWarehouse = ['WAREHOUSE', 'ADMIN'].includes(role);
+
+  if (role === 'WAREHOUSE') {
+    return (
+      <WarehousePurchasesView
+        purchases={purchases}
+        getAuthHeaders={getAuthHeaders}
+        onRefresh={fetchData}
+      />
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
@@ -1205,6 +1291,35 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                       />
                     </div>
                   </div>
+                  <div style={{ flex: '1 1 100%', display: 'flex', gap: '10px', flexWrap: 'wrap', paddingTop: '6px', borderTop: '1px dashed rgba(139,92,246,0.25)' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={isFirstTimeSupplier} onChange={(e) => setIsFirstTimeSupplier(e.target.checked)} />
+                      Покупка у этого поставщика первый раз
+                    </label>
+                    {isFirstTimeSupplier && (
+                      <input
+                        className="form-input"
+                        placeholder="Адрес ЭДО поставщика"
+                        value={supplierEdoAddress}
+                        onChange={(e) => setSupplierEdoAddress(e.target.value)}
+                        style={{ flex: '1 1 200px' }}
+                      />
+                    )}
+                    <select className="form-select" value={poaEmployeeName} onChange={(e) => setPoaEmployeeName(e.target.value)} style={{ flex: '1 1 180px' }}>
+                      <option value="">-- На кого выписывать доверенность --</option>
+                      {users.map((u: any) => (
+                        <option key={u.id} value={u.name}>{u.name}</option>
+                      ))}
+                    </select>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <button type="button" onClick={() => setPoaDeliveryMethod('STANDARD')} className="inline-btn" style={{ background: poaDeliveryMethod === 'STANDARD' ? '#8b5cf6' : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '0.75rem' }}>
+                        Общепринятый вариант
+                      </button>
+                      <button type="button" onClick={() => setPoaDeliveryMethod('EDO')} className="inline-btn" style={{ background: poaDeliveryMethod === 'EDO' ? '#0ea5e9' : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '0.75rem' }}>
+                        По ЭДО
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1490,6 +1605,25 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                     )}
 
                     {/* POA (ДОВЕРЕННОСТЬ Д-1) INFO */}
+                    {['APPROVED_FOR_PAYMENT', 'PAID_AND_ORDERED', 'PAID', 'POA_ISSUED', 'IN_TRANSIT', 'PARTIALLY_DELIVERED', 'DELIVERED'].includes(p.status) &&
+                      (p.poaEmployeeName || p.supplierEdoAddress || p.poaDeliveryMethod === 'EDO') && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '7px 11px',
+                        background: 'rgba(147, 51, 234, 0.2)',
+                        border: '1px solid #a855f7',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        color: '#e9d5ff',
+                        fontWeight: 600,
+                      }}>
+                        🟣 Доверенность на: {p.poaEmployeeName || p.poaIssuedTo || 'Не указано'} |{' '}
+                        {p.poaDeliveryMethod === 'EDO'
+                          ? `По ЭДО${p.supplierEdoAddress ? `: ${p.supplierEdoAddress}` : ''}`
+                          : 'Общепринятый вариант'}
+                      </div>
+                    )}
+
                     {p.poaNumber && (
                       <div style={{ 
                         marginTop: '8px', 
@@ -1517,6 +1651,33 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         </div>
                       </div>
                     )}
+
+                    {/* ХРОНОЛОГИЧЕСКАЯ ЛЕНТА ЭТАПОВ (ТАЙМЛАЙН) */}
+                    {(() => {
+                      const steps: string[] = [];
+                      const fmtShort = (d: any) => {
+                        const dt = new Date(d);
+                        if (isNaN(dt.getTime())) return '';
+                        return `${String(dt.getDate()).padStart(2, '0')}.${String(dt.getMonth() + 1).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+                      };
+                      if (p.createdAt) steps.push(`Создана ${fmtShort(p.createdAt)}`);
+                      if (p.inWorkAt) steps.push(`В работе ${fmtShort(p.inWorkAt)}`);
+                      if (p.approvedAt) steps.push(`Утверждена ${fmtShort(p.approvedAt)}`);
+                      if (p.paidAt) steps.push(`Оплачена ${fmtShort(p.paidAt)}`);
+                      if (p.inTransitAt) steps.push(`В пути ${fmtShort(p.inTransitAt)}`);
+                      if (p.deliveredAt) steps.push(`Принята ${fmtShort(p.deliveredAt)}`);
+                      if (steps.length === 0) return null;
+                      return (
+                        <div style={{ marginTop: '7px', fontSize: '0.71rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                          ⏱ {steps.join(' → ')}
+                          {p.expectedDeliveryDate && (
+                            <span style={{ marginLeft: '8px', color: '#fbbf24' }}>
+                              (Ожид. доставка: {formatDate(p.expectedDeliveryDate)})
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* AMOUNT */}
@@ -1582,7 +1743,19 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         </button>
                       )}
 
-                      {p.deliveryNoteUrl && (
+                      {(p.waybills && p.waybills.length > 0) ? (
+                        p.waybills.map((wb: any, idx: number) => (
+                          <button
+                            key={wb.id}
+                            type="button"
+                            onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(wb.fileUrl), title: `🚚 Накладная ${wb.waybillNumber ? `№${wb.waybillNumber}` : `#${idx + 1}`} (Заявка #${p.id})` })}
+                            className="inline-btn"
+                            style={{ background: 'rgba(20, 184, 166, 0.16)', color: '#2dd4bf', fontSize: '0.73rem', padding: '3px 8px' }}
+                          >
+                            🚚 Накладная {wb.waybillNumber ? `№${wb.waybillNumber}` : `#${idx + 1}`}
+                          </button>
+                        ))
+                      ) : p.deliveryNoteUrl ? (
                         <button
                           type="button"
                           onClick={() => setPreviewFile({ url: formatTelegramOrFileUrl(p.deliveryNoteUrl), title: `🚚 Накладная (Заявка #${p.id})` })}
@@ -1591,7 +1764,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         >
                           🚚 Накладная
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </td>
 
@@ -1761,36 +1934,35 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         );
                       })()}
 
-                      {/* 6. SUPPLY: PICKED UP AT SUPPLIER / IN TRANSIT (ON PAID_AND_ORDERED / POA_ISSUED) */}
-                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') && isSupply && (() => {
-                        const k = `pur_${p.id}_IN_TRANSIT`;
-                        const isL = loadingKey === k;
-                        const isC = confirmedKey === k;
-                        return (
+                      {/* 6. IN TRANSIT (MANAGER if direct by manager, else SUPPLY; + ADMIN) */}
+                      {(p.status === 'POA_ISSUED' || p.status === 'PAID_AND_ORDERED' || p.status === 'PAID') &&
+                        (p.isDirectByManager ? (role === 'MANAGER' || role === 'ADMIN') : (role === 'SUPPLY' || role === 'ADMIN')) && (
                           <button
-                            disabled={isL}
-                            onClick={() => updatePurchaseStatus(p.id, 'IN_TRANSIT', {}, k)}
+                            onClick={() => {
+                              setInTransitModalPurchase(p);
+                              setExpectedDeliveryDate(
+                                p.expectedDeliveryDate
+                                  ? new Date(p.expectedDeliveryDate).toISOString().split('T')[0]
+                                  : (p.plannedDeliveryDate ? new Date(p.plannedDeliveryDate).toISOString().split('T')[0] : '')
+                              );
+                            }}
                             className="inline-btn"
-                            style={{ background: isC ? '#10b981' : '#3b82f6', color: '#fff', fontWeight: 600, opacity: isL ? 0.7 : 1 }}
-                            title="Товар получен у поставщика / Везем на склад"
+                            style={{ background: '#3b82f6', color: '#fff', fontWeight: 600 }}
+                            title="Отметить «В пути» и указать предполагаемую дату доставки"
                           >
-                            {isL ? '⏳ Сохранение...' : isC ? '✅ Подтверждено' : '🚚 Везем на склад'}
+                            🚚 В пути
                           </button>
-                        );
-                      })()}
+                        )}
 
-                      {/* 7. WAREHOUSE / SUPPLY: RECEIVE AT WAREHOUSE ONLY ON IN_TRANSIT */}
-                      {p.status === 'IN_TRANSIT' && (isWarehouse || isSupply) && (
+                      {/* 7. WAREHOUSE / SUPPLY: RECEIVE AT WAREHOUSE ON IN_TRANSIT / PARTIALLY_DELIVERED */}
+                      {(p.status === 'IN_TRANSIT' || p.status === 'PARTIALLY_DELIVERED') && (isWarehouse || isSupply) && (
                         <button
-                          onClick={() => {
-                            setDeliveryModalPurchase(p);
-                            setDeliveryNoteUrl(p.deliveryNoteUrl || '');
-                          }}
+                          onClick={() => openDeliveryModal(p)}
                           className="inline-btn"
                           style={{ background: '#14b8a6', color: '#fff', fontWeight: 600 }}
-                          title="Принять ТМЦ на склад (с загрузкой накладной)"
+                          title="Принять поставку (частично или полностью) с загрузкой накладной"
                         >
-                          📥 Принято на склад
+                          📥 Принять поставку
                         </button>
                       )}
 
@@ -2103,6 +2275,35 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                 </div>
               </div>
 
+              <div style={{ padding: '10px', borderRadius: '8px', background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={supplyFirstTime} onChange={(e) => setSupplyFirstTime(e.target.checked)} />
+                  Покупка у этого поставщика первый раз
+                </label>
+                {supplyFirstTime && (
+                  <input
+                    className="form-input"
+                    placeholder="Адрес ЭДО поставщика"
+                    value={supplyEdoAddress}
+                    onChange={(e) => setSupplyEdoAddress(e.target.value)}
+                  />
+                )}
+                <select className="form-select" value={supplyPoaEmployee} onChange={(e) => setSupplyPoaEmployee(e.target.value)}>
+                  <option value="">-- На кого выписывать доверенность Д-1 --</option>
+                  {users.map((u: any) => (
+                    <option key={u.id} value={u.name}>{u.name}</option>
+                  ))}
+                </select>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" onClick={() => setSupplyPoaMethod('STANDARD')} className="inline-btn" style={{ flex: 1, background: supplyPoaMethod === 'STANDARD' ? '#8b5cf6' : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '0.75rem' }}>
+                    Общепринятый вариант
+                  </button>
+                  <button type="button" onClick={() => setSupplyPoaMethod('EDO')} className="inline-btn" style={{ flex: 1, background: supplyPoaMethod === 'EDO' ? '#0ea5e9' : 'rgba(255,255,255,0.06)', color: '#fff', fontSize: '0.75rem' }}>
+                    По ЭДО
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
                   Комментарий снабженца / условия (предоплата, доставка)
@@ -2341,15 +2542,91 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
         </div>
       )}
 
-      {/* WAREHOUSE DELIVERY NOTE MODAL (Приемка на склад) */}
+      {/* IN-TRANSIT MODAL (В пути + Предполагаемая дата доставки) */}
+      {inTransitModalPurchase && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="form-card" style={{ width: '420px', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '8px' }}>🚚 Отгрузка в пути (Заявка #{inTransitModalPurchase.id})</h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '14px' }}>
+              {inTransitModalPurchase.title}
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await updatePurchaseStatus(
+                  inTransitModalPurchase.id,
+                  'IN_TRANSIT',
+                  { expectedDeliveryDate },
+                  `pur_${inTransitModalPurchase.id}_IN_TRANSIT`
+                );
+                setInTransitModalPurchase(null);
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
+            >
+              <div>
+                <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Предполагаемая дата доставки на склад *
+                </label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={expectedDeliveryDate}
+                  onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button type="button" className="inline-btn" onClick={() => setInTransitModalPurchase(null)}>Отмена</button>
+                <button type="submit" disabled={loadingKey === `pur_${inTransitModalPurchase.id}_IN_TRANSIT`} className="btn-submit" style={{ background: '#3b82f6' }}>
+                  {loadingKey === `pur_${inTransitModalPurchase.id}_IN_TRANSIT` ? '⏳ Сохранение...' : '🚚 Подтвердить «В пути»'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* WAREHOUSE DELIVERY NOTE MODAL (Частичная или полная приемка на склад) */}
       {deliveryModalPurchase && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="form-card" style={{ width: '440px', background: '#151b26' }}>
-            <h3 style={{ marginTop: 0, marginBottom: '6px' }}>📦 Приёмка на склад (Заявка #{deliveryModalPurchase.id})</h3>
+          <div className="form-card" style={{ width: '540px', maxHeight: '90vh', overflowY: 'auto', background: '#151b26' }}>
+            <h3 style={{ marginTop: 0, marginBottom: '6px' }}>📥 Приёмка поставки на склад (Заявка #{deliveryModalPurchase.id})</h3>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: 0, marginBottom: '14px' }}>
-              Прикрепите фото или PDF накладной при получении ТМЦ на склад.
+              Укажите фактически принятое количество по позициям и прикрепите фото/PDF накладной.
             </p>
             <form onSubmit={handleDeliveryConfirm} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {deliveryModalPurchase.items && deliveryModalPurchase.items.length > 0 && (
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {deliveryModalPurchase.items.map((it: any) => {
+                    const rem = Math.max(0, (Number(it.quantity) || 0) - (Number(it.deliveredQty) || 0));
+                    return (
+                      <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', fontSize: '0.8rem' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600 }}>{it.name}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            Заказано: {it.quantity} {it.unit} • Принято: {it.deliveredQty || 0} • Осталось: {rem}
+                          </div>
+                        </div>
+                        <input
+                          className="form-input"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          style={{ width: '90px' }}
+                          value={deliveryItemQtys[it.id] ?? ''}
+                          onChange={(e) => setDeliveryItemQtys((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <input
+                className="form-input"
+                placeholder="Номер накладной (опционально)"
+                value={deliveryWaybillNumber}
+                onChange={(e) => setDeliveryWaybillNumber(e.target.value)}
+              />
               <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Фото / PDF накладной (авто-сжатие изображений)</label>
                 <input
@@ -2372,8 +2649,8 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
               />
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button type="button" className="inline-btn" onClick={() => setDeliveryModalPurchase(null)}>Отмена</button>
-                <button type="submit" disabled={loadingKey === `pur_${deliveryModalPurchase.id}_DELIVERED`} className="btn-submit" style={{ background: '#14b8a6' }}>
-                  {loadingKey === `pur_${deliveryModalPurchase.id}_DELIVERED` ? '⏳ Сохранение...' : '📦 Подтвердить приемку'}
+                <button type="submit" disabled={loadingKey === `pur_${deliveryModalPurchase.id}_RECEIVE_DELIVERY`} className="btn-submit" style={{ background: '#14b8a6' }}>
+                  {loadingKey === `pur_${deliveryModalPurchase.id}_RECEIVE_DELIVERY` ? '⏳ Сохранение...' : '📥 Подтвердить приёмку'}
                 </button>
               </div>
             </form>

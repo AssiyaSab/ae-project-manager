@@ -31,6 +31,9 @@ export async function GET(request: Request) {
           include: { items: true },
           orderBy: { createdAt: 'asc' }
         },
+        waybills: {
+          orderBy: { receivedAt: 'desc' }
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -48,7 +51,24 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
-    let { type, discipline, title, amount, projectId, fileUrl, requesterId, items, invoiceFileUrl, supplierName, invoiceNumber, directToDirector } = body;
+    let {
+      type,
+      discipline,
+      title,
+      amount,
+      projectId,
+      fileUrl,
+      requesterId,
+      items,
+      invoiceFileUrl,
+      supplierName,
+      invoiceNumber,
+      directToDirector,
+      isFirstTimeSupplier,
+      supplierEdoAddress,
+      poaEmployeeName,
+      poaDeliveryMethod,
+    } = body;
     
     const isManagement = ['ADMIN', 'MANAGER', 'CHIEF_ACCOUNTANT', 'ACCOUNTANT', 'SUPPLY'].includes(user.role);
     if (!isManagement) {
@@ -102,6 +122,11 @@ export async function POST(request: Request) {
         fileUrl: fileUrl || null,
         invoiceFileUrl: invoiceFileUrl || null,
         supplierName: supplierName || null,
+        isFirstTimeSupplier: Boolean(isFirstTimeSupplier),
+        supplierEdoAddress: supplierEdoAddress ? String(supplierEdoAddress).trim() : null,
+        poaEmployeeName: poaEmployeeName ? String(poaEmployeeName).trim() : null,
+        poaDeliveryMethod: poaDeliveryMethod === 'EDO' ? 'EDO' : 'STANDARD',
+        isDirectByManager: isDirectInvoiceToDirector,
         invoiceNumber: invoiceNumber || null,
         status: initialStatus,
         requesterId: finalRequesterId,
@@ -115,7 +140,14 @@ export async function POST(request: Request) {
           }))
         } : undefined
       },
-      include: { project: true, requester: true, supplyUser: true, items: { include: { invoice: true } }, invoices: { include: { items: true } } }
+      include: {
+        project: true,
+        requester: true,
+        supplyUser: true,
+        items: { include: { invoice: true } },
+        invoices: { include: { items: true } },
+        waybills: true,
+      }
     });
 
     // Telegram уведомление
@@ -244,13 +276,107 @@ export async function PATCH(request: Request) {
       poaIssuedTo,
       poaIsEdo,
       deliveryNoteUrl,
+      isFirstTimeSupplier,
+      supplierEdoAddress,
+      poaEmployeeName,
+      poaDeliveryMethod,
+      expectedDeliveryDate,
       action,
       itemId,
+      waybillNumber,
+      receivedItems,
       items
     } = body;
     
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    }
+
+    if (action === 'RECEIVE_DELIVERY') {
+      if (!['WAREHOUSE', 'SUPPLY', 'ADMIN'].includes(user.role)) {
+        return NextResponse.json({ error: 'Недостаточно прав для приемки поставки на склад' }, { status: 403 });
+      }
+      const purchaseIdNum = Number(id);
+      const targetPurchase = await prisma.purchaseRequest.findUnique({
+        where: { id: purchaseIdNum },
+        include: { items: true, project: true, requester: true },
+      });
+      if (!targetPurchase) {
+        return NextResponse.json({ error: 'Заявка не найдена' }, { status: 404 });
+      }
+
+      if (fileUrl) {
+        await prisma.purchaseWaybill.create({
+          data: {
+            purchaseId: purchaseIdNum,
+            waybillNumber: waybillNumber ? String(waybillNumber).trim() : null,
+            fileUrl: String(fileUrl),
+            receivedBy: (user as any).name || (user as any).login || 'Кладовщик',
+          },
+        });
+      }
+
+      if (Array.isArray(receivedItems)) {
+        for (const ri of receivedItems) {
+          const qty = Number(ri.qtyReceived) || 0;
+          if (ri.itemId && qty > 0) {
+            await prisma.purchaseItem.update({
+              where: { id: Number(ri.itemId) },
+              data: { deliveredQty: { increment: qty } },
+            });
+          }
+        }
+      }
+
+      const refreshedItems = await prisma.purchaseItem.findMany({
+        where: { purchaseId: purchaseIdNum },
+      });
+      const hasRemaining =
+        refreshedItems.length > 0 &&
+        refreshedItems.some((it) => (Number(it.deliveredQty) || 0) < (Number(it.quantity) || 0));
+
+      const nextStatus = hasRemaining ? 'PARTIALLY_DELIVERED' : 'DELIVERED';
+      const updated = await prisma.purchaseRequest.update({
+        where: { id: purchaseIdNum },
+        data: {
+          status: nextStatus,
+          ...(fileUrl ? { deliveryNoteUrl: String(fileUrl) } : {}),
+          ...(!hasRemaining
+            ? {
+                deliveredAt: new Date(),
+                receivedByUserId: user.id && user.id > 0 && user.id !== 999 ? user.id : null,
+              }
+            : {}),
+        },
+        include: {
+          project: true,
+          requester: true,
+          supplyUser: true,
+          receivedByUser: true,
+          items: { include: { invoice: true }, orderBy: { id: 'asc' } },
+          invoices: { include: { items: true }, orderBy: { createdAt: 'asc' } },
+          waybills: { orderBy: { receivedAt: 'desc' } },
+        },
+      });
+
+      if (!hasRemaining) {
+        await completeSupplyTask(updated.id);
+        await reconcileProjectEstimate(updated.projectId);
+        if (updated.requester?.telegramId) {
+          await sendTelegramMessage(
+            updated.requester.telegramId,
+            `🎉 *Материалы полностью приняты на склад!*\n\n*Проект:* ${updated.project?.name || ''}\n*Заявка:* ${updated.title}`,
+            { parse_mode: 'Markdown' }
+          ).catch(() => {});
+        }
+      }
+
+      await createAuditLog(
+        user.id || null,
+        'RECEIVE_PURCHASE_DELIVERY',
+        `Приемка на склад по заявке #${purchaseIdNum} (${nextStatus})`
+      );
+      return NextResponse.json(updated);
     }
 
     if (action === 'MARK_ITEM_FROM_STOCK' && itemId) {
@@ -314,8 +440,14 @@ export async function PATCH(request: Request) {
       if (status === 'POA_ISSUED' && !['ACCOUNTANT', 'CHIEF_ACCOUNTANT', 'ADMIN'].includes(user.role)) {
         return NextResponse.json({ error: 'Только Бухгалтерия или Директор может оформлять доверенность Д-1' }, { status: 403 });
       }
-      if (status === 'IN_TRANSIT' && !['SUPPLY', 'ADMIN'].includes(user.role)) {
-        return NextResponse.json({ error: 'Только Снабженец или Директор может переводить в статус «Везем на склад»' }, { status: 403 });
+      if (status === 'IN_TRANSIT') {
+        if (currentPurchase.isDirectByManager) {
+          if (!['MANAGER', 'ADMIN'].includes(user.role)) {
+            return NextResponse.json({ error: 'Для прямой заявки Руководителя статус «В пути» подтверждает Руководитель или Директор' }, { status: 403 });
+          }
+        } else if (!['SUPPLY', 'ADMIN'].includes(user.role)) {
+          return NextResponse.json({ error: 'Только Снабженец или Директор может переводить в статус «В пути»' }, { status: 403 });
+        }
       }
       if (status === 'DELIVERED' && !['WAREHOUSE', 'SUPPLY', 'ADMIN'].includes(user.role)) {
         return NextResponse.json({ error: 'Только Кладовщик, Снабженец или Директор может принять ТМЦ на склад' }, { status: 403 });
@@ -331,9 +463,14 @@ export async function PATCH(request: Request) {
     if (fileUrl !== undefined) data.fileUrl = fileUrl;
 
     if (supplierName !== undefined) data.supplierName = supplierName;
+    if (isFirstTimeSupplier !== undefined) data.isFirstTimeSupplier = Boolean(isFirstTimeSupplier);
+    if (supplierEdoAddress !== undefined) data.supplierEdoAddress = supplierEdoAddress ? String(supplierEdoAddress).trim() : null;
+    if (poaEmployeeName !== undefined) data.poaEmployeeName = poaEmployeeName ? String(poaEmployeeName).trim() : null;
+    if (poaDeliveryMethod !== undefined) data.poaDeliveryMethod = poaDeliveryMethod === 'EDO' ? 'EDO' : 'STANDARD';
     if (invoiceNumber !== undefined) data.invoiceNumber = invoiceNumber;
     if (invoiceDate !== undefined) data.invoiceDate = invoiceDate ? new Date(invoiceDate) : null;
     if (plannedDeliveryDate !== undefined) data.plannedDeliveryDate = plannedDeliveryDate ? new Date(plannedDeliveryDate) : null;
+    if (expectedDeliveryDate !== undefined) data.expectedDeliveryDate = expectedDeliveryDate ? new Date(expectedDeliveryDate) : null;
     if (supplyComment !== undefined) data.supplyComment = supplyComment;
     if (invoiceFileUrl !== undefined) data.invoiceFileUrl = invoiceFileUrl;
     if (paymentReceiptUrl !== undefined) data.paymentReceiptUrl = paymentReceiptUrl;
@@ -345,12 +482,13 @@ export async function PATCH(request: Request) {
     if (poaIsEdo !== undefined) data.poaIsEdo = Boolean(poaIsEdo);
     if (deliveryNoteUrl !== undefined) data.deliveryNoteUrl = deliveryNoteUrl;
 
-    // Автоматическая фиксация ответственных при смене статусов
+    // Автоматическая фиксация ответственных и таймстемпов при смене статусов
     if (status === 'IN_PROCUREMENT' || status === 'IN_SUPPLY') {
       data.supplyUserId = user.id || currentPurchase.supplyUserId;
+      if (!currentPurchase.inWorkAt) data.inWorkAt = new Date();
     }
     if (status === 'APPROVED_FOR_PAYMENT') {
-      // Сумма счета утверждена
+      data.approvedAt = new Date();
     }
     if (status === 'PAID_AND_ORDERED' || status === 'PAID' || status === 'PAID_EXPENSE') {
       data.paidAt = new Date();
@@ -388,7 +526,8 @@ export async function PATCH(request: Request) {
         supplyUser: true,
         receivedByUser: true,
         items: { include: { invoice: true }, orderBy: { id: 'asc' } },
-        invoices: { include: { items: true }, orderBy: { createdAt: 'asc' } }
+        invoices: { include: { items: true }, orderBy: { createdAt: 'asc' } },
+        waybills: { orderBy: { receivedAt: 'desc' } },
       }
     });
 

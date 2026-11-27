@@ -94,25 +94,35 @@ model PurchaseRequest {
   requester           User?     @relation("Requester", fields: [requesterId], references: [id])
   
   // Данные обработки снабжением
-  supplierName        String?   // Поставщик (ТОО / ИП)
-  invoiceNumber       String?   // Номер счета
-  invoiceDate         DateTime? // Дата счета
-  plannedDeliveryDate DateTime? // Срок / дата поставки
-  supplyComment       String?   // Комментарий / условия доставки
-  invoiceFileUrl      String?   // Ссылка / скан счета на оплату от поставщика
-  supplyUserId        Int?
-  supplyUser          User?     @relation("SupplyAssigned", fields: [supplyUserId], references: [id])
+  supplierName         String?   // Поставщик (ТОО / ИП)
+  isFirstTimeSupplier  Boolean   @default(false) // Первая покупка у этого поставщика
+  supplierEdoAddress   String?   // Адрес ЭДО поставщика
+  invoiceNumber        String?   // Номер счета
+  invoiceDate          DateTime? // Дата счета
+  plannedDeliveryDate  DateTime? // Срок / дата поставки
+  expectedDeliveryDate DateTime? // Предполагаемая дата доставки на склад
+  supplyComment        String?   // Комментарий / условия доставки
+  invoiceFileUrl       String?   // Ссылка / скан счета на оплату от поставщика
+  supplyUserId         Int?
+  supplyUser           User?     @relation("SupplyAssigned", fields: [supplyUserId], references: [id])
+  isDirectByManager    Boolean   @default(false) // Подано Руководителем напрямую со счетом (минуя снабжение)
+  
+  // Временные отметки этапов
+  inWorkAt             DateTime?
+  approvedAt           DateTime?
   
   // Данные оплаты и приемки
-  paymentReceiptUrl   String?   // Платежка бухгалтера
-  paidAt              DateTime?
+  paymentReceiptUrl    String?   // Платежка бухгалтера
+  paidAt               DateTime?
   
   // Доверенность формы Д-1 на получение ТМЦ
-  poaNumber           String?   // Номер доверенности
-  poaDate             DateTime? // Дата выдачи доверенности
-  poaFileUrl          String?   // Скан / фото доверенности
-  poaIssuedTo         String?   // ФИО сотрудника, на чье имя выдана доверенность
-  poaIsEdo            Boolean   @default(false) // Отправлено по ЭДО (скан не обязателен)
+  poaNumber            String?   // Номер доверенности
+  poaDate              DateTime? // Дата выдачи доверенности
+  poaFileUrl           String?   // Скан / фото доверенности
+  poaIssuedTo          String?   // ФИО сотрудника, на чье имя выдана доверенность
+  poaEmployeeName      String?   // На кого из сотрудников выписывать доверенность Д-1
+  poaDeliveryMethod    String    @default("STANDARD") // "EDO" | "STANDARD"
+  poaIsEdo             Boolean   @default(false) // Отправлено по ЭДО (скан не обязателен)
   
   // Логистика и приемка
   inTransitAt         DateTime? // Когда снабженец забрал товар / груз в пути
@@ -127,9 +137,20 @@ model PurchaseRequest {
   paymentTaskId       Int?
   paymentTask         Task?     @relation("PaymentTask", fields: [paymentTaskId], references: [id], onDelete: SetNull)
 
-  // Позиции спецификации / закупаемых ТМЦ и множественные счета
+  // Позиции спецификации / закупаемых ТМЦ, множественные счета и накладные
   items               PurchaseItem[]
   invoices            PurchaseInvoice[]
+  waybills            PurchaseWaybill[]
+}
+
+model PurchaseWaybill {
+  id            Int             @id @default(autoincrement())
+  purchaseId    Int
+  purchase      PurchaseRequest @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  waybillNumber String?
+  fileUrl       String
+  receivedAt    DateTime        @default(now())
+  receivedBy    String?
 }
 
 model PurchaseInvoice {
@@ -179,6 +200,7 @@ model PurchaseItem {
   invoiceId      Int?
   invoice        PurchaseInvoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   isPaid         Boolean              @default(false)
+  deliveredQty   Float                @default(0) // Фактически принятое на склад количество
   estimateItemId Int?
   estimateItem   ProjectEstimateItem? @relation(fields: [estimateItemId], references: [id], onDelete: SetNull)
   isReplacement  Boolean              @default(false)
