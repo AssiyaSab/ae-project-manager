@@ -87,7 +87,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   // Warehouse Delivery Note Modal State
   const [deliveryModalPurchase, setDeliveryModalPurchase] = useState<any>(null);
   const [deliveryNoteUrl, setDeliveryNoteUrl] = useState('');
-  const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string; approvalStamp?: { approvedBy: string; date?: string } | null } | null>(null);
 
   // Print Ref
   const purchasePrintRef = useRef(null);
@@ -1547,16 +1547,25 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                         </button>
                       )}
 
-                      {p.invoiceFileUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewFile({ url: p.invoiceFileUrl.startsWith('data:') ? `/api/purchases/invoice-file?id=${p.id}` : formatTelegramOrFileUrl(p.invoiceFileUrl), title: `📄 Счет поставщика (Заявка #${p.id})` })}
-                          className="inline-btn"
-                          style={{ background: 'rgba(139, 92, 246, 0.16)', color: '#c4b5fd', fontSize: '0.73rem', padding: '3px 8px' }}
-                        >
-                          📄 Счет поставщика
-                        </button>
-                      )}
+                      {p.invoiceFileUrl && (() => {
+                        const isDirectorApproved = ['APPROVED_FOR_PAYMENT', 'PAID_AND_ORDERED', 'PAID', 'POA_ISSUED', 'IN_TRANSIT', 'DELIVERED'].includes(p.status);
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewFile({
+                              url: p.invoiceFileUrl.startsWith('data:') ? `/api/purchases/invoice-file?id=${p.id}` : formatTelegramOrFileUrl(p.invoiceFileUrl),
+                              title: `📄 Счет поставщика (Заявка #${p.id})`,
+                              approvalStamp: isDirectorApproved
+                                ? { approvedBy: 'Быкаев К.Ж.', date: formatDate(p.paidAt || p.updatedAt || p.createdAt) }
+                                : null,
+                            })}
+                            className="inline-btn"
+                            style={{ background: 'rgba(139, 92, 246, 0.16)', color: '#c4b5fd', fontSize: '0.73rem', padding: '3px 8px' }}
+                          >
+                            📄 Счет поставщика {isDirectorApproved ? '✅' : ''}
+                          </button>
+                        );
+                      })()}
 
                       {p.poaFileUrl && (
                         <button
@@ -1874,11 +1883,25 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                                 <div>
                                   <strong>{inv.supplierName || 'Поставщик'}</strong> {inv.invoiceNumber ? `• Счет №${inv.invoiceNumber}` : ''} — <strong>{inv.amount.toLocaleString('ru-RU')} ₸</strong>
                                   <span style={{ marginLeft: '8px', color: 'var(--text-muted)' }}>({inv.items?.length || 0} поз.)</span>
-                                  {inv.fileUrl && (
-                                    <a href={inv.fileUrl} target="_blank" rel="noreferrer" style={{ marginLeft: '10px', color: '#38bdf8', textDecoration: 'underline' }}>
-                                      📎 Файл счета
-                                    </a>
-                                  )}
+                                  {inv.fileUrl && (() => {
+                                    const isInvApproved = ['APPROVED_FOR_PAYMENT', 'PAID'].includes(inv.status);
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewFile({
+                                          url: formatTelegramOrFileUrl(inv.fileUrl),
+                                          title: `📄 Счет №${inv.invoiceNumber || inv.id} (${inv.supplierName || 'Поставщик'})`,
+                                          approvalStamp: isInvApproved
+                                            ? { approvedBy: 'Быкаев К.Ж.', date: formatDate(inv.paidAt || inv.updatedAt || inv.createdAt) }
+                                            : null,
+                                        })}
+                                        className="inline-btn"
+                                        style={{ marginLeft: '10px', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', fontSize: '0.72rem', padding: '2px 7px' }}
+                                      >
+                                        📎 Файл счета {isInvApproved ? '✅' : ''}
+                                      </button>
+                                    );
+                                  })()}
                                 </div>
                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                   <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: '6px', background: inv.status === 'PAID' ? 'rgba(16,185,129,0.2)' : inv.status === 'APPROVED_FOR_PAYMENT' ? 'rgba(59,130,246,0.2)' : 'rgba(245,158,11,0.2)', color: inv.status === 'PAID' ? '#10b981' : inv.status === 'APPROVED_FOR_PAYMENT' ? '#60a5fa' : '#f59e0b' }}>

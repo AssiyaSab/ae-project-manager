@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useReactToPrint } from 'react-to-print';
 
 export function formatTelegramOrFileUrl(url?: string | null): string {
   if (!url) return '';
@@ -12,8 +13,17 @@ export function formatTelegramOrFileUrl(url?: string | null): string {
   return `/api/files/telegram/${encodeURIComponent(trimmed)}`;
 }
 
+export interface ApprovalStampInfo {
+  approvedBy: string;
+  date?: string;
+}
+
 interface FilePreviewModalProps {
-  file: { url: string; title: string } | null;
+  file: {
+    url: string;
+    title: string;
+    approvalStamp?: ApprovalStampInfo | null;
+  } | null;
   onClose: () => void;
 }
 
@@ -22,6 +32,12 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
   const [mimeType, setMimeType] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const printAreaRef = useRef<HTMLDivElement>(null);
+
+  const handlePrintWithStamp = useReactToPrint({
+    contentRef: printAreaRef,
+    documentTitle: file?.title || 'Document',
+  });
 
   useEffect(() => {
     if (!file) return;
@@ -81,12 +97,62 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
   const isPdf = mimeType.includes('pdf');
   const isImage = mimeType.startsWith('image/');
 
+  const renderApprovalStamp = () => {
+    if (!file.approvalStamp) return null;
+    return (
+      <div
+        style={{
+          marginTop: '12px',
+          display: 'flex',
+          justifyContent: 'flex-end',
+          width: '100%',
+        }}
+      >
+        <div
+          style={{
+            border: '2.5px solid #047857',
+            borderRadius: '8px',
+            padding: '8px 14px',
+            color: '#047857',
+            background: 'rgba(236, 253, 245, 0.96)',
+            fontFamily: 'Arial, sans-serif',
+            textAlign: 'center',
+            lineHeight: 1.35,
+            boxShadow: '0 2px 10px rgba(4, 120, 87, 0.18)',
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: '0.82rem', letterSpacing: '0.8px' }}>
+            ОДОБРЕНО ДИРЕКТОРОМ
+          </div>
+          <div style={{ fontWeight: 700, fontSize: '0.85rem', marginTop: '2px' }}>
+            {file.approvalStamp.approvedBy}
+          </div>
+          {file.approvalStamp.date && (
+            <div style={{ fontSize: '0.72rem', marginTop: '2px', opacity: 0.9 }}>
+              Дата: {file.approvalStamp.date}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1200, padding: '16px' }}>
       <div className="form-card" style={{ width: '880px', maxWidth: '100%', maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: '#0f172a', border: '1px solid rgba(255,255,255,0.15)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '10px', flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, fontSize: '1rem' }}>{file.title}</h3>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {blobUrl && file.approvalStamp && isImage && (
+              <button
+                type="button"
+                onClick={() => handlePrintWithStamp()}
+                className="inline-btn"
+                style={{ background: '#059669', color: '#fff', fontWeight: 600 }}
+              >
+                🖨️ Печать со штампом
+              </button>
+            )}
             {blobUrl && (
               <>
                 <a href={blobUrl} target="_blank" rel="noreferrer" className="inline-btn" style={{ background: '#3b82f6', color: '#fff', textDecoration: 'none' }}>
@@ -103,21 +169,26 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
           </div>
         </div>
 
-        <div style={{ flex: 1, minHeight: '420px', maxHeight: '75vh', overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#020617', borderRadius: '8px', padding: '10px' }}>
-          {loading && <div style={{ color: 'var(--text-muted)' }}>⏳ Загрузка файла из Telegram...</div>}
+        <div style={{ flex: 1, minHeight: '420px', maxHeight: '76vh', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#020617', borderRadius: '8px', padding: '12px' }}>
+          {loading && <div style={{ color: 'var(--text-muted)' }}>⏳ Загрузка файла...</div>}
           {error && <div style={{ color: '#f87171' }}>⚠️ {error}</div>}
-          {!loading && !error && blobUrl && isPdf && (
-            <iframe src={blobUrl} style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '6px' }} title={file.title} />
-          )}
-          {!loading && !error && blobUrl && isImage && (
-            <img src={blobUrl} alt={file.title} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '6px' }} />
-          )}
-          {!loading && !error && blobUrl && !isPdf && !isImage && (
-            <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-              <p>Предпросмотр для этого типа файла недоступен в браузере.</p>
-              <a href={blobUrl} download className="btn-submit" style={{ textDecoration: 'none', display: 'inline-block' }}>
-                📥 Скачать файл
-              </a>
+          {!loading && !error && blobUrl && (
+            <div ref={printAreaRef} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {isPdf && (
+                <iframe src={blobUrl} style={{ width: '100%', height: file.approvalStamp ? '62vh' : '70vh', border: 'none', borderRadius: '6px', background: '#fff' }} title={file.title} />
+              )}
+              {isImage && (
+                <img src={blobUrl} alt={file.title} style={{ maxWidth: '100%', maxHeight: file.approvalStamp ? '62vh' : '70vh', objectFit: 'contain', borderRadius: '6px' }} />
+              )}
+              {!isPdf && !isImage && (
+                <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <p>Предпросмотр для этого типа файла недоступен в браузере.</p>
+                  <a href={blobUrl} download className="btn-submit" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                    📥 Скачать файл
+                  </a>
+                </div>
+              )}
+              {renderApprovalStamp()}
             </div>
           )}
         </div>
