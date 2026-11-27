@@ -17,6 +17,7 @@ export function formatTelegramOrFileUrl(url?: string | null): string {
 export interface ApprovalStampInfo {
   approvedBy: string;
   date?: string;
+  projectName?: string;
 }
 
 interface FilePreviewModalProps {
@@ -157,6 +158,11 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
           <div style={{ fontWeight: 700, fontSize: '0.85rem', marginTop: '2px' }}>
             {file.approvalStamp.approvedBy}
           </div>
+          {file.approvalStamp.projectName && (
+            <div style={{ fontWeight: 700, fontSize: '0.75rem', marginTop: '3px' }}>
+              Объект: {file.approvalStamp.projectName}
+            </div>
+          )}
           {file.approvalStamp.date && (
             <div style={{ fontSize: '0.72rem', marginTop: '2px', opacity: 0.9 }}>
               Дата: {file.approvalStamp.date}

@@ -87,7 +87,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   // Warehouse Delivery Note Modal State
   const [deliveryModalPurchase, setDeliveryModalPurchase] = useState<any>(null);
   const [deliveryNoteUrl, setDeliveryNoteUrl] = useState('');
-  const [previewFile, setPreviewFile] = useState<{ url: string; title: string; approvalStamp?: { approvedBy: string; date?: string } | null } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string; approvalStamp?: { approvedBy: string; date?: string; projectName?: string } | null } | null>(null);
 
   // Print Ref
   const purchasePrintRef = useRef(null);
@@ -1556,7 +1556,11 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                               url: p.invoiceFileUrl.startsWith('data:') ? `/api/purchases/invoice-file?id=${p.id}` : formatTelegramOrFileUrl(p.invoiceFileUrl),
                               title: `📄 Счет поставщика (Заявка #${p.id})`,
                               approvalStamp: isDirectorApproved
-                                ? { approvedBy: 'Быкаев К.Ж.', date: formatDate(p.paidAt || p.updatedAt || p.createdAt) }
+                                ? {
+                                    approvedBy: 'Быкаев К.Ж.',
+                                    date: formatDate(p.paidAt || p.updatedAt || p.createdAt),
+                                    projectName: p.project?.name || undefined,
+                                  }
                                 : null,
                             })}
                             className="inline-btn"
@@ -1892,7 +1896,11 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
                                           url: formatTelegramOrFileUrl(inv.fileUrl),
                                           title: `📄 Счет №${inv.invoiceNumber || inv.id} (${inv.supplierName || 'Поставщик'})`,
                                           approvalStamp: isInvApproved
-                                            ? { approvedBy: 'Быкаев К.Ж.', date: formatDate(inv.paidAt || inv.updatedAt || inv.createdAt) }
+                                            ? {
+                                                approvedBy: 'Быкаев К.Ж.',
+                                                date: formatDate(inv.paidAt || inv.updatedAt || inv.createdAt),
+                                                projectName: p.project?.name || undefined,
+                                              }
                                             : null,
                                         })}
                                         className="inline-btn"
