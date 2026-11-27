@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useReactToPrint } from 'react-to-print';
+import { stampImageBlob, stampPdfBytes } from '@/lib/stampInvoice';
 
 export function formatTelegramOrFileUrl(url?: string | null): string {
   if (!url) return '';
@@ -30,6 +31,7 @@ interface FilePreviewModalProps {
 export default function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
   const [blobUrl, setBlobUrl] = useState<string>('');
   const [mimeType, setMimeType] = useState<string>('');
+  const [embeddedStampApplied, setEmbeddedStampApplied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -46,40 +48,76 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
 
     const load = async () => {
       const normalized = formatTelegramOrFileUrl(file.url);
-      if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
-        setBlobUrl(normalized);
-        setMimeType(normalized.toLowerCase().includes('.pdf') ? 'application/pdf' : 'image/*');
-        return;
-      }
-      if (normalized.startsWith('data:')) {
-        setBlobUrl(normalized);
-        const m = normalized.match(/^data:([^;]+);/);
-        setMimeType(m ? m[1] : 'application/octet-stream');
-        return;
+      setEmbeddedStampApplied(false);
+      setError('');
+
+      // If no approvalStamp and external/data URL, show directly without fetching
+      if (!file.approvalStamp) {
+        if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+          setBlobUrl(normalized);
+          setMimeType(normalized.toLowerCase().includes('.pdf') ? 'application/pdf' : 'image/*');
+          return;
+        }
+        if (normalized.startsWith('data:')) {
+          setBlobUrl(normalized);
+          const m = normalized.match(/^data:([^;]+);/);
+          setMimeType(m ? m[1] : 'application/octet-stream');
+          return;
+        }
       }
 
       setLoading(true);
-      setError('');
       try {
+        const isInternalApi = normalized.startsWith('/api/');
         const pass = typeof window !== 'undefined' ? localStorage.getItem('ae_admin_password') || '' : '';
         const login = typeof window !== 'undefined' ? localStorage.getItem('ae_auth_login') || '' : '';
-        const res = await fetch(normalized, {
-          headers: {
-            'x-admin-password': pass,
-            'x-auth-password': pass,
-            'x-auth-login': login,
-          },
-        });
+
+        const res = await fetch(
+          normalized,
+          isInternalApi
+            ? {
+                headers: {
+                  'x-admin-password': pass,
+                  'x-auth-password': pass,
+                  'x-auth-login': login,
+                },
+              }
+            : undefined
+        );
         if (!res.ok) {
           throw new Error('Не удалось загрузить файл');
         }
-        const blob = await res.blob();
+        let blob = await res.blob();
+        let finalMime = blob.type || (normalized.toLowerCase().includes('.pdf') ? 'application/pdf' : 'application/octet-stream');
+
+        if (file.approvalStamp) {
+          try {
+            if (finalMime.includes('pdf') || normalized.toLowerCase().includes('.pdf')) {
+              blob = await stampPdfBytes(await blob.arrayBuffer(), file.approvalStamp);
+              finalMime = 'application/pdf';
+              if (active) setEmbeddedStampApplied(true);
+            } else if (finalMime.startsWith('image/')) {
+              blob = await stampImageBlob(blob, file.approvalStamp);
+              finalMime = 'image/png';
+              if (active) setEmbeddedStampApplied(true);
+            }
+          } catch (stampErr) {
+            console.warn('Could not embed stamp directly into file, showing HTML overlay fallback:', stampErr);
+          }
+        }
+
         if (!active) return;
         createdObjectUrl = URL.createObjectURL(blob);
         setBlobUrl(createdObjectUrl);
-        setMimeType(blob.type || 'application/octet-stream');
+        setMimeType(finalMime);
       } catch (err: any) {
-        if (active) setError(err?.message || 'Ошибка загрузки файла');
+        // Fallback for external URLs blocked by CORS
+        if (active && (normalized.startsWith('http://') || normalized.startsWith('https://'))) {
+          setBlobUrl(normalized);
+          setMimeType(normalized.toLowerCase().includes('.pdf') ? 'application/pdf' : 'image/*');
+        } else if (active) {
+          setError(err?.message || 'Ошибка загрузки файла');
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -97,17 +135,10 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
   const isPdf = mimeType.includes('pdf');
   const isImage = mimeType.startsWith('image/');
 
-  const renderApprovalStamp = () => {
-    if (!file.approvalStamp) return null;
+  const renderFallbackHtmlStamp = () => {
+    if (!file.approvalStamp || embeddedStampApplied) return null;
     return (
-      <div
-        style={{
-          marginTop: '12px',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          width: '100%',
-        }}
-      >
+      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
         <div
           style={{
             border: '2.5px solid #047857',
@@ -118,7 +149,6 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
             fontFamily: 'Arial, sans-serif',
             textAlign: 'center',
             lineHeight: 1.35,
-            boxShadow: '0 2px 10px rgba(4, 120, 87, 0.18)',
           }}
         >
           <div style={{ fontWeight: 800, fontSize: '0.82rem', letterSpacing: '0.8px' }}>
@@ -158,7 +188,7 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
                 <a href={blobUrl} target="_blank" rel="noreferrer" className="inline-btn" style={{ background: '#3b82f6', color: '#fff', textDecoration: 'none' }}>
                   🔗 В новой вкладке
                 </a>
-                <a href={blobUrl} download className="inline-btn" style={{ background: '#10b981', color: '#fff', textDecoration: 'none' }}>
+                <a href={blobUrl} download={isPdf ? 'schet_odobreno.pdf' : 'schet_odobreno.png'} className="inline-btn" style={{ background: '#10b981', color: '#fff', textDecoration: 'none' }}>
                   📥 Скачать
                 </a>
               </>
@@ -170,15 +200,15 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
         </div>
 
         <div style={{ flex: 1, minHeight: '420px', maxHeight: '76vh', overflow: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#020617', borderRadius: '8px', padding: '12px' }}>
-          {loading && <div style={{ color: 'var(--text-muted)' }}>⏳ Загрузка файла...</div>}
+          {loading && <div style={{ color: 'var(--text-muted)' }}>⏳ Загрузка и наложение штампа...</div>}
           {error && <div style={{ color: '#f87171' }}>⚠️ {error}</div>}
           {!loading && !error && blobUrl && (
             <div ref={printAreaRef} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               {isPdf && (
-                <iframe src={blobUrl} style={{ width: '100%', height: file.approvalStamp ? '62vh' : '70vh', border: 'none', borderRadius: '6px', background: '#fff' }} title={file.title} />
+                <iframe src={blobUrl} style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '6px', background: '#fff' }} title={file.title} />
               )}
               {isImage && (
-                <img src={blobUrl} alt={file.title} style={{ maxWidth: '100%', maxHeight: file.approvalStamp ? '62vh' : '70vh', objectFit: 'contain', borderRadius: '6px' }} />
+                <img src={blobUrl} alt={file.title} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '6px' }} />
               )}
               {!isPdf && !isImage && (
                 <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -188,7 +218,7 @@ export default function FilePreviewModal({ file, onClose }: FilePreviewModalProp
                   </a>
                 </div>
               )}
-              {renderApprovalStamp()}
+              {renderFallbackHtmlStamp()}
             </div>
           )}
         </div>
