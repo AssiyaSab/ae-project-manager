@@ -8,13 +8,16 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { login, password } = body;
 
-    if (!login || !password) {
+    const cleanLogin = typeof login === 'string' ? login.trim() : '';
+    const cleanPassword = typeof password === 'string' ? password.trim() : '';
+
+    if (!cleanLogin || !cleanPassword) {
       return NextResponse.json({ error: 'Логин и пароль обязательны' }, { status: 400 });
     }
 
     // Проверяем мастер-пароль админа
     const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-    if (login === 'admin' && password === expectedAdmin) {
+    if (cleanLogin.toLowerCase() === 'admin' && cleanPassword === expectedAdmin) {
       return NextResponse.json({
         id: 0,
         name: 'ГИП (Мастер-аккаунт)',
@@ -27,8 +30,8 @@ export async function POST(request: Request) {
     // Ищем пользователя в БД
     const user = await prisma.user.findFirst({
       where: {
-        login: login,
-        password: password, // В реальном проекте здесь должен быть хэш, но для ТЗ оставляем как есть
+        login: { equals: cleanLogin, mode: 'insensitive' },
+        password: cleanPassword, // В реальном проекте здесь должен быть хэш, но для ТЗ оставляем как есть
         isActive: true
       }
     });

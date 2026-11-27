@@ -2,14 +2,22 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
 export async function validateAuth(request: Request) {
-  const login = request.headers.get('x-auth-login');
-  const password = request.headers.get('x-auth-password') || request.headers.get('x-admin-password');
+  const rawLogin = request.headers.get('x-auth-login');
+  const rawPassword = request.headers.get('x-auth-password') || request.headers.get('x-admin-password');
+  const login = rawLogin ? rawLogin.trim() : null;
+  const password = rawPassword ? rawPassword.trim() : null;
 
   const expectedAdmin = process.env.ADMIN_PASSWORD || 'AE_ADMIN_2026';
-  if ((login === 'admin' || !login) && password === expectedAdmin) return { id: 0, role: 'ADMIN' };
+  if ((login?.toLowerCase() === 'admin' || !login) && password === expectedAdmin) return { id: 0, role: 'ADMIN' };
 
   if (login && password) {
-    const user = await prisma.user.findFirst({ where: { login, password, isActive: true } });
+    const user = await prisma.user.findFirst({
+      where: {
+        login: { equals: login, mode: 'insensitive' },
+        password,
+        isActive: true
+      }
+    });
     if (user) return user;
   }
   
