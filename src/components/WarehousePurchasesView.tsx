@@ -21,6 +21,7 @@ export default function WarehousePurchasesView({
   const [subTab, setSubTab] = useState<'EXPECTED' | 'RECEIVED'>('EXPECTED');
   const [collapsedProjectKeys, setCollapsedProjectKeys] = useState<string[]>([]);
   const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Reception modal state
   const [receivingPurchase, setReceivingPurchase] = useState<any>(null);
@@ -29,10 +30,30 @@ export default function WarehousePurchasesView({
   const [itemQuantities, setItemQuantities] = useState<Record<number, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const expectedPurchases = purchases.filter((p) =>
-    ['IN_TRANSIT', 'PARTIALLY_DELIVERED'].includes(p.status)
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const matchesSearch = (p: any) => {
+    if (!normalizedSearch) return true;
+    const haystack = [
+      `#${p.id}`,
+      String(p.id),
+      p.title,
+      p.project?.name,
+      p.requester?.name,
+      ...(p.items || []).flatMap((it: any) => [it.name, it.sku]),
+      ...(p.waybills || []).map((wb: any) => wb.waybillNumber),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return haystack.includes(normalizedSearch);
+  };
+
+  const expectedPurchases = purchases.filter(
+    (p) => ['IN_TRANSIT', 'PARTIALLY_DELIVERED'].includes(p.status) && matchesSearch(p)
   );
-  const receivedPurchases = purchases.filter((p) => p.status === 'DELIVERED');
+  const receivedPurchases = purchases.filter(
+    (p) => p.status === 'DELIVERED' && matchesSearch(p)
+  );
 
   // Group expected purchases by Project
   const projectGroupsMap = new Map<string, { key: string; projectName: string; isNoProject: boolean; purchases: any[] }>();
@@ -118,7 +139,7 @@ export default function WarehousePurchasesView({
 
   return (
     <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
         <h2 className="card-title" style={{ margin: 0 }}>📦 Склад: Приёмка поставок ТМЦ</h2>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button
@@ -148,6 +169,47 @@ export default function WarehousePurchasesView({
             📦 Принято на склад ({receivedPurchases.length})
           </button>
         </div>
+      </div>
+
+      <div style={{ position: 'relative', marginBottom: '18px' }}>
+        <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '0.9rem' }}>
+          🔍
+        </span>
+        <input
+          type="text"
+          className="form-input"
+          placeholder="Быстрый поиск: проект, наименование, артикул, накладная, #ID..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            width: '100%',
+            paddingLeft: '36px',
+            paddingRight: searchQuery ? '36px' : '12px',
+            height: '38px',
+            fontSize: '0.88rem',
+          }}
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            title="Очистить поиск"
+            style={{
+              position: 'absolute',
+              right: '8px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              fontSize: '0.95rem',
+              padding: '4px 6px',
+            }}
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {subTab === 'EXPECTED' && (

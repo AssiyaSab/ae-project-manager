@@ -21,6 +21,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
       setStatusFilter('ALL');
       setDisciplineFilter('ALL');
       setProjectFilter('ALL');
+      setSearchQuery('');
       setTimeout(() => {
         const el = document.getElementById(`purchase-row-${highlightPurchaseId}`);
         if (el) {
@@ -55,6 +56,7 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
   const [disciplineFilter, setDisciplineFilter] = useState<string>('ALL');
   const [projectFilter, setProjectFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Supply Processing Modal State
   const [supplyModalPurchase, setSupplyModalPurchase] = useState<any>(null);
@@ -845,7 +847,29 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
   };
 
   // Filtered purchases
+  const normalizedSearch = searchQuery.trim().toLowerCase();
   const filteredPurchases = purchases.filter(p => {
+    if (normalizedSearch) {
+      const haystack = [
+        `#${p.id}`,
+        String(p.id),
+        p.title,
+        p.comment,
+        p.project?.name,
+        p.requester?.name,
+        p.supplierName,
+        p.invoiceNumber,
+        p.poaEmployeeName,
+        ...(p.invoices || []).flatMap((inv: any) => [inv.supplierName, inv.invoiceNumber]),
+        ...(p.items || []).flatMap((it: any) => [it.name, it.sku]),
+        ...(p.waybills || []).map((wb: any) => wb.waybillNumber),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(normalizedSearch)) return false;
+    }
+
     if (typeFilter !== 'ALL') {
       if (typeFilter === 'INVOICE' && p.type === 'EXPENSE') return false;
       if (typeFilter === 'EXPENSE' && p.type !== 'EXPENSE') return false;
@@ -1375,6 +1399,55 @@ export default function PurchasesTab({ currentUser, projects, users, highlightPu
               📦 Общее ({analytics.generalCount}): <strong>{analytics.generalSum.toLocaleString('ru-RU')} ₸</strong>
             </button>
           </div>
+        </div>
+
+        {/* SEARCH BAR */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative', flex: '1 1 280px', minWidth: '220px' }}>
+            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none', fontSize: '0.9rem' }}>
+              🔍
+            </span>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Поиск заявки: название, проект, поставщик, счёт, позиция, заявитель, #ID..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                paddingLeft: '36px',
+                paddingRight: searchQuery ? '36px' : '12px',
+                height: '38px',
+                fontSize: '0.88rem',
+              }}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                title="Очистить поиск"
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  padding: '4px 6px',
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {normalizedSearch && (
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              Найдено: <strong style={{ color: 'var(--text-primary)' }}>{filteredPurchases.length}</strong>
+            </span>
+          )}
         </div>
 
         {/* FILTERS */}
